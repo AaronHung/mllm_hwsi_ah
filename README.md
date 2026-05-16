@@ -78,7 +78,8 @@ Note: Ensure the downloaded WSI slide_ids matches the ones in the json files.
 |   |   ...
 ```
 
-## Data Preparation
+## Data Preparation 
+### Hierarchical WSI->Region->Patch->Cell level feature extraction
 
 As our method (MLLM-HWSI) involves region, patches, and cell feature extraction from the WSIs, it is recommended to perform these steps before training or testing. 
 
@@ -100,7 +101,6 @@ python ext_regions.py \
 ```
 
 ### 2. Region and Patch feature extraction
-
 
 * Patch extraction from regions
 * Patch-level feature extraction
