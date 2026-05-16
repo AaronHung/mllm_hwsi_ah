@@ -62,6 +62,8 @@ pip install -r requirements.txt
 
 3. Download train and test WSI .svs from [here](https://portal.gdc.cancer.gov/projects/TCGA-ACC) and put them in your preferred directory.
 
+Note: Ensure the downloaded WSI slide_ids matches the ones in the json files.
+
 ```
 ├── ./data          # Base data directory
 │   ├── trainWSI      # training data folder
@@ -101,8 +103,8 @@ python ext_regions.py \
 
 
 * Patch extraction from regions
-* Patch-level feature extraction using
-* Region-level features extraction using HIPT 
+* Patch-level feature extraction
+* Region-level features extraction
 * WSI-level features using Region-level feature aggregation
 
 ```
