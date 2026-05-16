@@ -37,6 +37,29 @@ workflows and advance holistic WSI understanding.
 
 ## Environment Setup
 
+1. Create the python environment
+
+```bash
+conda create -y --name mllm_hwsi python==3.10.0
+conda activate mllm_hwsi
+``` 
+
+2. Install pytorch and torchvision
+```bash
+pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu130
+```
+
+3. Install other packages
+
+```bash
+pip install -r requirements.txt
+```
+
+## Data
+
+1. Test json files are provided in ./data directory.
+2. We provide train json files [here](https://drive.google.com/drive/folders/1y8g3kGmD1pgIrBVKX9MWoSmqzWwduvy8?usp=sharing).
+
 ## Inference
 
 ## Training
