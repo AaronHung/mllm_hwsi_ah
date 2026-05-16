@@ -2,13 +2,13 @@
 
 # MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding
 
+**Repository under construction...**
+
 - Official repository for our paper MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding
 
 * <a href="https://https://arxiv.org/abs/2603.23067"><img src="https://img.shields.io/badge/arXiv-Paper_Link-blue"></a> 
 
 * <img src="https://img.shields.io/badge/Accepted-CVPR_2026-success?style=for-the-badge&logo=academia&logoColor=white" alt="Accepted at CVPR 2026">
-
-**Repository under construction...**
 
 ## Model Overview
 
