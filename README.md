@@ -84,7 +84,7 @@ NOTE: Steps 1 to 4 below should be performed sequentially.
 
 ### 1. Region Extraction
 
-* Region extraction using CLAM.
+* Region extraction from WSI.
 
 ```
 python ext_regions.py \
@@ -100,7 +100,7 @@ python ext_regions.py \
 ### 2. Region and Patch feature extraction
 
 
-* Patch extraction from regions using CLAM
+* Patch extraction from regions
 * Patch-level feature extraction using
 * Region-level features extraction using HIPT 
 * WSI-level features using Region-level feature aggregation
@@ -181,4 +181,26 @@ Note:
 
 ## Acknowledgements
 
+This work acknowledges the authors of the following repositories:
+
+- [CLAM](https://github.com/mahmoodlab/CLAM)
+- [TRIDENT](https://github.com/mahmoodlab/TRIDENT)
+- [HIPT](https://github.com/mahmoodlab/HIPT)
+- [CONCH](https://github.com/mahmoodlab/CONCH)
+- [CellViT](https://github.com/TIO-IKIM/CellViT)
+
 ## Citation
+
+If you find our work useful in your research, please consider citing:
+
+```
+@article{alawode2026mllmhwsi,
+      title={MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding}, 
+      author={Basit Alawode and Arif Mahmood and Muaz Khalifa Al-Radi and Shahad Albastaki and Asim Khan and Muhammad Bilal and Moshira Ali Abdalla and Mohammed Bennamoun and Sajid Javed},
+      year={2026},
+      eprint={2603.23067},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2603.23067}, 
+}
+```
