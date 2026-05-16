@@ -55,10 +55,125 @@ pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url htt
 pip install -r requirements.txt
 ```
 
-## Data
+## Data Download
 
 1. Test json files are provided in ./data directory.
 2. We provide train json files [here](https://drive.google.com/drive/folders/1y8g3kGmD1pgIrBVKX9MWoSmqzWwduvy8?usp=sharing).
+
+3. Download train and test WSI .svs from [here](https://portal.gdc.cancer.gov/projects/TCGA-ACC) and put them in your preferred directory.
+
+```
+├── ./data          # Base data directory
+│   ├── trainWSI      # training data folder
+|   │   ├── <slide_id_1>.svs      
+|   │   ├── <slide_id_2>.svs  
+|   │   └── <slide_id_3>.svs
+|   |   ...
+│   ├── testWSI      # test data folder
+|   │   ├── <slide_id_1>.svs      
+|   │   ├── <slide_id_2>.svs  
+|   │   └── <slide_id_3>.svs
+|   |   ...
+```
+
+## Data Preparation
+
+As our method (MLLM-HWSI) involves region, patches, and cell feature extraction from the WSIs, it is recommended to perform these steps before training or testing. 
+
+NOTE: Steps 1 to 4 below should be performed sequentially.
+
+### 1. Region Extraction
+
+* Region extraction using CLAM.
+
+```
+python ext_regions.py \
+  --source <WSI directory> \
+  --save_dir <regions save directory> \
+  --mag_level 20 \
+  --patch_size 4096 \
+  --seg \
+  --patch \
+  --stitch
+```
+
+### 2. Region and Patch feature extraction
+
+
+* Patch extraction from regions using CLAM
+* Patch-level feature extraction using
+* Region-level features extraction using HIPT 
+* WSI-level features using Region-level feature aggregation
+
+```
+python ext_feats_conch_hierar_par.py \
+  --wsi_dir <WSI directory> \
+  --reports_path <Report json file path> \
+  --h5_dir_4096 <regions save directory>/patches \
+  --hipt_repo ./HIPT_4K \
+  --checkpoint256 <hipt 256 model.pth path> \
+  --checkpoint4k <hipt 4096 model.pth path> \
+  --trident_repo ./trident \
+  --conch_ckpt_path <conch.bin model path> \
+  --conch_batch_size 128 \
+  --encoder_name conch_v1 \
+  --conch_model_cfg conch_ViT-B-16 \
+  --out_dir <features save directory> \
+  --patch_size 256 \
+  --extract_patch_features \
+  --n_diss_features 32 \
+  --top_k 16 \
+  --all_gpus \
+  --workers_per_gpu 1
+```
+
+Note: You may
+
+* download HIPT vit_256_small_dino.pth and vit_4096_xs_dino.pth from [here](https://drive.google.com/drive/folders/1dzOOKTHMPbDh59zPEkOZX5ss6A6Vj9R1?usp=sharing): Source [HIPT](https://github.com/mahmoodlab/HIPT).
+
+* download CONCH checkpoint from [here](https://drive.google.com/drive/folders/1WEF_loFf05FbmUvFo6DUYTYzHKJF4Nym?usp=sharing): Source [CONCH](https://github.com/mahmoodlab/CONCH).
+
+### 3. Cell-level feature extraction
+
+```
+python ext_cell_feat_par.py \
+  --wsi_dir <WSI directory> \
+  --region_coords_dir <features save directory>/coords_region4096_valid \
+  --selected_indices_dir <features save directory>/patches_filtered \
+  --checkpoint <cellvit 256 model.pth path> \
+  --output_dir <features save directory>/cells \
+  --batch_size 16 \
+  --magnification 40 \
+  --all_gpus \
+  --workers_per_gpu 1 \
+  --feature_mode mask_mean \
+  --enforce_amp \
+  --save_full_outputs_regions_per_wsi 10 \
+  --full_output_region_selection random
+```
+
+Note: You may
+
+* download CellViT CellViT-256-x40-AMP.pth from [here](https://drive.google.com/drive/folders/1dEqwN5NaQ-8oIcc8zDYQo_Q_6VDMS_QU?usp=sharing): Source [CellViT](https://github.com/TIO-IKIM/CellViT).
+
+### 4. Save images for visualization (optional)
+
+```
+python save_patch_images.py \
+  --wsi_dir <WSI directory> \
+  --coords_dir <features save directory>/coords_region4096_valid \
+  --indices_dir <features save directory>/patches_filtered \
+  --output_dir <features save directory>/sample_images \
+  --region_size 4096 \
+  --patch_size 256 \
+  --mag_level 20 \
+  --max_wsi 2 \
+  --max_regions_per_wsi 20 \
+  --selection_mode random
+```
+
+Note:
+ * Other customizations are available in the respective python files. You may tweak them to your particular applications.
 
 ## Inference
 
