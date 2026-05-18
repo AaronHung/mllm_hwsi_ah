@@ -58,15 +58,15 @@ def normalize_vqa_answer(text: str) -> str:
     return t.lower()
 
 
-# def compute_accuracy(prediction: str, reference: str) -> Dict[str, float]:
-#     pred_norm = normalize_vqa_answer(prediction)
-#     ref_norm = normalize_vqa_answer(reference)
-#     acc = float(pred_norm == ref_norm)
-#     return {
-#         "accuracy": acc,
-#         "pred_norm": pred_norm,
-#         "ref_norm": ref_norm,
-#     }
+def compute_accuracy(prediction: str, reference: str) -> Dict[str, float]:
+    pred_norm = normalize_vqa_answer(prediction)
+    ref_norm = normalize_vqa_answer(reference)
+    acc = float(pred_norm == ref_norm)
+    return {
+        "accuracy": acc,
+        "pred_norm": pred_norm,
+        "ref_norm": ref_norm,
+    }
 
 def clean_text_list(texts):
     cleaned = []
@@ -378,7 +378,7 @@ def parse_args():
     parser.add_argument("--num_slide_tokens", type=int, default=64)
     parser.add_argument("--projector_type", type=str, default="mlp", choices=["linear", "mlp"])
 
-    parser.add_argument("--max_new_tokens", type=int, default=256)
+    parser.add_argument("--max_new_tokens", type=int, default=512)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top_p", type=float, default=0.9)
     parser.add_argument("--do_sample", action="store_true")
@@ -392,6 +392,8 @@ def parse_args():
     parser.add_argument("--lora_r", type=int, default=128)
     parser.add_argument("--lora_alpha", type=int, default=256)
     parser.add_argument("--lora_dropout", type=float, default=0.05)
+
+    parser.add_argument("--use_accuracy", type=float, default=False)
 
     return parser.parse_args()
 
@@ -493,7 +495,8 @@ def main():
 
     model.eval()
     outputs: List[Dict[str, Any]] = []
-    #slide_accuracies: Dict[str, Dict[str, Any]] = {}  # slide_id -> {correct, total, accuracy}
+    
+    slide_accuracies: Dict[str, Dict[str, Any]] = {}  # slide_id -> {correct, total, accuracy}
     total_scored = 0
     total_correct = 0
     total_skipped = 0
@@ -564,17 +567,19 @@ def main():
             
             responses.append(response)
             references.append(t_answer)
-            #metrics = compute_accuracy(response, t_answer)
-            # total_scored += 1
-            # total_correct += int(metrics["accuracy"])
-            # running_acc = total_correct / max(total_scored, 1)
 
-            # # Track per-slide accuracy
-            # if slide_id not in slide_accuracies:
-            #     slide_accuracies[slide_id] = {"correct": 0, "total": 0}
-            # slide_accuracies[slide_id]["total"] += 1
-            # slide_accuracies[slide_id]["correct"] += int(metrics["accuracy"])
-            # slide_accuracies[slide_id]["accuracy"] = slide_accuracies[slide_id]["correct"] / slide_accuracies[slide_id]["total"]
+            if args.use_accuracy:
+                metrics = compute_accuracy(response, t_answer)
+                total_scored += 1
+                total_correct += int(metrics["accuracy"])
+                running_acc = total_correct / max(total_scored, 1)
+
+                # Track per-slide accuracy
+                if slide_id not in slide_accuracies:
+                    slide_accuracies[slide_id] = {"correct": 0, "total": 0}
+                slide_accuracies[slide_id]["total"] += 1
+                slide_accuracies[slide_id]["correct"] += int(metrics["accuracy"])
+                slide_accuracies[slide_id]["accuracy"] = slide_accuracies[slide_id]["correct"] / slide_accuracies[slide_id]["total"]
 
             print("=" * 80)
             print(f"[{i}/{len(records)}] SAMPLE ID: {sample_id}")
@@ -589,17 +594,19 @@ def main():
             print("T-ANSWER:")
             print(t_answer)
             print("-" * 80)
-            #print(f"ACCURACY: {metrics['accuracy']:.6f} | RUNNING_ACC: {running_acc:.6f}")
-            #print("=" * 80)
 
-            # outputs.append({
-            #     "sample_id": sample_id,
-            #     "question_id": slide_id,
-            #     "question": question,
-            #     "generated_response": response,
-            #     "T-answer": t_answer,
-            #     "metrics": metrics,
-            # })
+            if args.use_accuracy:
+                print(f"ACCURACY: {metrics['accuracy']:.6f} | RUNNING_ACC: {running_acc:.6f}")
+                print("=" * 80)
+
+                outputs.append({
+                    "sample_id": sample_id,
+                    "question_id": slide_id,
+                    "question": question,
+                    "generated_response": response,
+                    "T-answer": t_answer,
+                    "metrics": metrics,
+                })
 
             outputs.append({
                 "sample_id": sample_id,
@@ -618,56 +625,61 @@ def main():
                 "error": str(e),
             })
 
-    #final_acc = total_correct / max(total_scored, 1)
-    #avg_slide_acc = sum(s["accuracy"] for s in slide_accuracies.values()) / max(len(slide_accuracies), 1) if slide_accuracies else 0.0
-    
-    print(f"[VQA] Computing BERTScore accuracy for {len(responses)} scored samples...")
-    metrics = compute_bertscore_accuracy(responses, references, device=args.device, return_individual=True)
+    if args.use_accuracy:
+        final_acc = total_correct / max(total_scored, 1)
+        avg_slide_acc = sum(s["accuracy"] for s in slide_accuracies.values()) / max(len(slide_accuracies), 1) if slide_accuracies else 0.0
+    else:    
+        print(f"[VQA] Computing BERTScore accuracy for {len(responses)} scored samples...")
+        metrics = compute_bertscore_accuracy(responses, references, device=args.device, return_individual=True)
 
-    summary = {
-        "type": "summary",
-        "total_records": len(records),
-        "total_skipped": total_skipped,
-        "total_unavailable": total_unavailable,
-        "total_scored": total_scored,
-        "total_correct": total_correct,
-        "Precision": metrics["precision"],
-        "Recall": metrics["recall"],
-        "F1": metrics["f1"],
-    }
+    if args.use_accuracy:
+        summary = {
+            "type": "summary",
+            "total_records": len(records),
+            "total_skipped": total_skipped,
+            "total_unavailable": total_unavailable,
+            "total_scored": total_scored,
+            "total_correct": total_correct,
+            "accuracy": final_acc,
+            "num_slides": len(slide_accuracies),
+            "avg_slide_accuracy": avg_slide_acc,
+            "per_slide_accuracy": slide_accuracies,
+        }
+    else:
+        summary = {
+            "type": "summary",
+            "total_records": len(records),
+            "total_skipped": total_skipped,
+            "total_unavailable": total_unavailable,
+            "total_scored": total_scored,
+            "total_correct": total_correct,
+            "Precision": metrics["precision"],
+            "Recall": metrics["recall"],
+            "F1": metrics["f1"],
+        }
 
-    # summary = {
-    #     "type": "summary",
-    #     "total_records": len(records),
-    #     "total_skipped": total_skipped,
-    #     "total_unavailable": total_unavailable,
-    #     "total_scored": total_scored,
-    #     "total_correct": total_correct,
-    #     "accuracy": final_acc,
-    #     "num_slides": len(slide_accuracies),
-    #     "avg_slide_accuracy": avg_slide_acc,
-    #     "per_slide_accuracy": slide_accuracies,
-    # }
     outputs.append(summary)
 
     print("=" * 80)
-    print("[VQA SUMMARY]")
-    print(f"total_records    : {len(records)}")
-    print(f"total_skipped    : {total_skipped} (extraction/inference errors)")
-    print(f"total_unavailable: {total_unavailable} (features not found)")
-    print(f"total_scored     : {total_scored}")
-    print(f"total_correct    : {total_correct}")
-    print(f"Precision        : {metrics['precision']:.6f}")
-    print(f"Recall           : {metrics['recall']:.6f}")
-    print(f"F1               : {metrics['f1']:.6f}")
+    if args.use_accuracy:
+        print(f"overall_accuracy : {final_acc:.6f}")
+        print(f"num_slides       : {len(slide_accuracies)}")
+        print(f"avg_slide_acc    : {avg_slide_acc:.6f}")
+        print("\n[PER-SLIDE ACCURACY]")
+        for sid in sorted(slide_accuracies.keys()):
+            acc_data = slide_accuracies[sid]
+            print(f"  {sid}: {acc_data['accuracy']:.6f} ({acc_data['correct']}/{acc_data['total']})")
+    else:
+        print("[VQA SUMMARY]")
+        print(f"total_records    : {len(records)}")
+        print(f"total_skipped    : {total_skipped} (extraction/inference errors)")
+        print(f"total_unavailable: {total_unavailable} (features not found)")
+        print(f"total_scored     : {total_scored}")
+        print(f"total_correct    : {total_correct}")
+        print(f"Precision        : {metrics['precision']:.6f}")
+        print(f"Recall           : {metrics['recall']:.6f}")
+        print(f"F1               : {metrics['f1']:.6f}")
 
-    # print(f"overall_accuracy : {final_acc:.6f}")
-    # print(f"num_slides       : {len(slide_accuracies)}")
-    # print(f"avg_slide_acc    : {avg_slide_acc:.6f}")
-    # print("\n[PER-SLIDE ACCURACY]")
-    # for sid in sorted(slide_accuracies.keys()):
-    #     acc_data = slide_accuracies[sid]
-    #     print(f"  {sid}: {acc_data['accuracy']:.6f} ({acc_data['correct']}/{acc_data['total']})")
     print("=" * 80)
 
     os.makedirs(os.path.dirname(args.output_json) or ".", exist_ok=True)

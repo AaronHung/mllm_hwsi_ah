@@ -283,7 +283,8 @@ python main_test_vqa.py \
   --cell_pt_filename encoded_cell_features.pt \
   --output_json <output json result path> \
   --pathology_encoder_ckpt <MLLM-HWSI VL-projector path (training stage 2)> \
-  --model_name <MLLM-HWSI hf model folder path (training stage 3)> 
+  --model_name <MLLM-HWSI hf model folder path (training stage 3)> \ 
+  --use_accuracy False
 ```
 * Note: Other customizations are available in the respective python files. You may tweak them to your particular applications.
 
