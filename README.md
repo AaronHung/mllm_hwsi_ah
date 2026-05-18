@@ -173,7 +173,7 @@ Note:
 ### 1 Checkpoints Download
 
 * To be released soon... 
-* While we release the checpoints, you may train as described [here](#training).
+* While we release the checpoints, you may train as described [here](#training-mllm-hwsi).
 
 ### 2. Test: Report Generation
 
