@@ -133,7 +133,7 @@ Note: You may
 
 ```
 python ext_cell_feat_par.py \
-  --wsi_dir <WSI directory> \
+  --wsi_dir <Train or Test WSI directory> \
   --region_coords_dir <features save directory>/coords_region4096_valid \
   --selected_indices_dir <features save directory>/patches_filtered \
   --checkpoint <cellvit 256 model.pth path> \
@@ -151,7 +151,7 @@ Note: You may
 
 ```
 python save_patch_images.py \
-  --wsi_dir <WSI directory> \
+  --wsi_dir <Train or Test WSI directory> \
   --coords_dir <features save directory>/coords_region4096_valid \
   --indices_dir <features save directory>/patches_filtered \
   --output_dir <features save directory>/sample_images \
@@ -179,7 +179,7 @@ Note:
 
 ```
 python main_test_gen.py \
-  --wsi_dir <WSI directory> \
+  --wsi_dir <Test WSI directory> \
   --report_json <Test report json file path> \
   --wsi_feat_dir <features save directory>/wsi \
   --region_feat_dir <features save directory>/region_4k \
@@ -195,7 +195,7 @@ python main_test_gen.py \
 
 ```
 python main_test_vqa.py \
-  --wsi_dir <WSI directory> \
+  --wsi_dir <Test WSI directory> \
   --report_json <Test report or conversation json file path> \
   --wsi_feat_dir <features save directory>/wsi \
   --region_feat_dir <features save directory>/region_4k \
@@ -224,8 +224,8 @@ python main_test_vqa.py \
 
 ```
 python main_train_proj_stage2.py \
-  --wsi_dir <WSI directory> \
-  --report_json <Test report or conversation json file path> \
+  --wsi_dir <Train WSI directory> \
+  --report_json <Train report json file path> \
   --wsi_feat_dir <features save directory>/wsi \
   --region_feat_dir <features save directory>/region_4k \
   --patch_feat_dir <features save directory>/patches_filtered \
@@ -245,8 +245,8 @@ python main_train_proj_stage2.py \
 
 ```
 python main_train_LLM_stage3.py \
-  --wsi_dir <WSI directory> \
-  --report_json <Test report or conversation json file path> \
+  --wsi_dir <Train WSI directory> \
+  --report_json <Train conversation json file path> \
   --wsi_feat_dir <features save directory>/wsi \
   --region_feat_dir <features save directory>/region_4k \
   --patch_feat_dir <features save directory>/patches_filtered \
