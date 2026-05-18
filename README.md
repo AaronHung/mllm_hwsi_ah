@@ -277,7 +277,11 @@ python main_test_vqa.py \
 
 ### MLLM-HWSI ChatBot
 
-* To be released soon...
+You may chat with MLLM-HWSI model using the ChatBot. 
+
+```
+python main_vqa_chat.py --port <port_number e.g. 8080>
+```
 
 
 ## Acknowledgements
