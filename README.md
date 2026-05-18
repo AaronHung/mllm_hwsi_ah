@@ -171,19 +171,6 @@ python save_patch_images.py \
 Note:
  * Other customizations are available in the respective python files. You may tweak them to your particular applications.
 
-### 5. Folder structure after extraction
-
-Below is how your data folder will look like after a successful feature extraction step
-
-```
-├── .data/          # Base data directory
-│   ├── WSI folder     # E.g. trainWSI or testWSI
-|   │   ├── <slide_id_1>.svs      
-|   │   ├── <slide_id_2>.svs  
-|   │   └── <slide_id_3>.svs
-|   |   ...
-```
-
 
 ## Training MLLM-HWSI
 
