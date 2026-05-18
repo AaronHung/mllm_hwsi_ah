@@ -38,19 +38,26 @@ workflows and advance holistic WSI understanding.
 
 ## Environment Setup
 
-1. Create the python environment
+1. Clone the repository
+
+```
+git clone https://github.com/BasitAlawode/MLLM-HWSI
+cd MLLM-HWSI
+```
+
+2. Create the python environment
 
 ```bash
 conda create -y --name mllm_hwsi python==3.10.0
 conda activate mllm_hwsi
 ``` 
 
-2. Install pytorch and torchvision
+3. Install pytorch and torchvision
 ```bash
 pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu130
 ```
 
-3. Install other packages
+4. Install other packages
 
 ```bash
 pip install -r requirements.txt
@@ -145,7 +152,8 @@ Note: You may
 
 * download CellViT CellViT-256-x40-AMP.pth from [here](https://drive.google.com/drive/folders/1dEqwN5NaQ-8oIcc8zDYQo_Q_6VDMS_QU?usp=sharing): Source [CellViT](https://github.com/TIO-IKIM/CellViT).
 
-### 4. Save images for visualization (optional)
+
+### 4. (Optional) Save images for visualization
 
 ```
 python save_patch_images.py \
@@ -162,6 +170,19 @@ python save_patch_images.py \
 
 Note:
  * Other customizations are available in the respective python files. You may tweak them to your particular applications.
+
+### 5. Folder structure after extraction
+
+Below is how your data folder will look like after a successful feature extraction step
+
+```
+├── .data/          # Base data directory
+│   ├── WSI folder     # E.g. trainWSI or testWSI
+|   │   ├── <slide_id_1>.svs      
+|   │   ├── <slide_id_2>.svs  
+|   │   └── <slide_id_3>.svs
+|   |   ...
+```
 
 
 ## Training MLLM-HWSI
@@ -232,7 +253,6 @@ python main_train_LLM_stage3.py \
 * Stage 2: [Cross-Modal V-L Projectors](https://drive.google.com/drive/folders/1AroZ52mz4N8_fLaa_EgjpQhpkJ62caET?usp=sharing)
 * Stage 3: [Instruction Tuning](https://drive.google.com/drive/folders/1VUSC77eK0hGPfu5ao6I6cbGUeSxD9KVu?usp=sharing). 
 * For stage 3, extract the the zip file.
-* Note: Current Model Upload Date: 18/05/2026. These models can be updated.
 
 ### 2. Test: Report Generation
 
