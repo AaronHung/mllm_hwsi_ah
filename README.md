@@ -216,19 +216,58 @@ python main_test_vqa.py \
 
 * Ensure that your WSI training data has been prepared as discribed in [Data preparation](#data-preparation) above.
 
-### Stage 1: Training Heirarchical Multi-Scale Encoders
+### Stage 1: Heirarchical Multi-Scale Encoders Pre-training
 
-```
-```
+* Please refer to [HIPT](https://github.com/mahmoodlab/HIPT), [CONCH](https://github.com/mahmoodlab/CONCH), and [CellViT](https://github.com/TIO-IKIM/CellViT) for the pretraining of the encoders.
 
 ### Stage 2: Training Cross-Modal V-L Projectors
 
 ```
+python main_train_proj_stage2.py \
+  --wsi_dir <WSI directory> \
+  --report_json <Test report or conversation json file path> \
+  --wsi_feat_dir <features save directory>/wsi \
+  --region_feat_dir <features save directory>/region_4k \
+  --patch_feat_dir <features save directory>/patches_filtered \
+  --cell_feat_dir <features save directory>/cells \
+  --cell_pt_filename encoded_cell_features.pt \
+  --save_dir <checkpoint save directory> \
+  --save_name <projector save name.pt> \
+  --model_name Qwen/Qwen2.5-7B-Instruct \
+  --device cuda \
+  --batch_size 1 \
+  --lr 1e-6 \
+  --val_ratio 0.2 \
+  --num_slide_tokens 64
 ```
 
 ### Stage 3: Task-specific Instruction Tuning
 
 ```
+python main_train_LLM_stage3.py \
+  --wsi_dir <WSI directory> \
+  --report_json <Test report or conversation json file path> \
+  --wsi_feat_dir <features save directory>/wsi \
+  --region_feat_dir <features save directory>/region_4k \
+  --patch_feat_dir <features save directory>/patches_filtered \
+  --cell_feat_dir <features save directory>/cells \
+  --cell_pt_filename encoded_cell_features.pt \
+  --stage2_ckpt <stage 2 projector saved path> \
+  --save_dir ../MLLM_HWSI_ckpts \
+  --model_name Qwen/Qwen2.5-7B-Instruct \
+  --lora_r 128 \
+  --lora_alpha 256 \
+  --epochs 5 \
+  --batch_size 1 \
+  --val_ratio 0.1 \
+  --lr 2e-5 \
+  --llm_lr 2e-5 \
+  --projector_lr 5e-5 \
+  --grad_accum_steps 4 \
+  --num_slide_tokens 64 \
+  --projector_type mlp \
+  --autocast_enabled \
+  --save_name <save name.pt>
 ```
 
 ## Acknowledgements
