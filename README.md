@@ -275,7 +275,7 @@ python main_test_vqa.py \
 ```
 * Note: Other customizations are available in the respective python files. You may tweak them to your particular applications.
 
-### MLLM-HWSI ChatBot
+## MLLM-HWSI ChatBot
 
 You may chat with MLLM-HWSI model using the ChatBot. 
 
