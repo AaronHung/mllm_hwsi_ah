@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trident_repo", type=str, required=True, help="Path to local TRIDENT repository root")
     parser.add_argument("--conch_ckpt_path", type=str, default=None, help="Optional local CONCH 1.5 checkpoint path")
     parser.add_argument("--conch_model_cfg", type=str, default="conch_ViT-B-16", help="CONCH model configuration")
-    parser.add_argument("--encoder_name", type=str, default="conch_v15", choices=["conch_v1", "conch_v15"], help="TRIDENT encoder name")
+    parser.add_argument("--encoder_name", type=str, default="conch_v1", choices=["conch_v1", "conch_v15"], help="TRIDENT encoder name")
     parser.add_argument("--conch_batch_size", type=int, default=128, help="Batch size for forward pass")
     parser.add_argument("--out_dir", type=str, required=True)
     parser.add_argument("--device", type=str, default="cuda:0")

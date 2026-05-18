@@ -966,7 +966,7 @@ def parse_args():
     p.add_argument("--max_regions_per_wsi", type=int, default=None)
     p.add_argument("--max_patches_per_region", type=int, default=None)
 
-    p.add_argument("--save_full_outputs_regions_per_wsi", type=int, default=0)
+    p.add_argument("--save_full_outputs_regions_per_wsi", type=int, default=20)
     p.add_argument("--full_output_region_selection", type=str, choices=["first", "random"], default="first")
 
     p.add_argument("--all_gpus", action="store_true")

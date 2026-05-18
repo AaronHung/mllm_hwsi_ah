@@ -410,7 +410,7 @@ def main():
                         help="Region size in pixels, e.g. 4096")
     parser.add_argument("--patch_size", type=int, required=True,
                         help="Patch size in pixels, e.g. 256")
-    parser.add_argument("--mag_level", type=int, default=0,
+    parser.add_argument("--mag_level", type=int, default=20,
                         help="OpenSlide magnification level to read from")
     parser.add_argument("--max_wsi", type=int, default=None,
                         help="Maximum number of WSIs to process")

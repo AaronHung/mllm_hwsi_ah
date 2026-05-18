@@ -6,7 +6,10 @@
 
 - Official repository for our paper MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding
 
-* <a href="https://arxiv.org/abs/2603.23067"><img src="https://img.shields.io/badge/arXiv-Paper_Link-blue"></a> 
+<p align="center">
+<a href="https://arxiv.org/abs/2603.23067"><img src="https://img.shields.io/badge/arXiv-Paper_Link-blue"></a> 
+<a href="#mllm-hwsi-chatbot"><img src="https://img.shields.io/badge/MLLM_HWSI ChatBot-orange">
+</p>
 
 * <img src="https://img.shields.io/badge/Accepted-CVPR_2026-success?style=for-the-badge&logo=academia&logoColor=white" alt="Accepted at CVPR 2026">
 
@@ -57,10 +60,9 @@ pip install -r requirements.txt
 
 ## Data Download
 
-1. Test json files are provided in ./data directory.
-2. We provide train json files [here](https://drive.google.com/drive/folders/1y8g3kGmD1pgIrBVKX9MWoSmqzWwduvy8?usp=sharing).
+1. Download the train and test set json files from [WSI-LLaVA](https://github.com/XinhengLyu/WSI-LLaVA/tree/main) repository.
 
-3. Download train and test WSI .svs from [here](https://portal.gdc.cancer.gov/projects/TCGA-ACC) and put them in your preferred directory.
+2. Download train and test WSI .svs from [here](https://portal.gdc.cancer.gov/projects/TCGA-ACC) and put them in your preferred directory.
 
 Note: Ensure the downloaded WSI slide_ids matches the ones in the json files.
 
@@ -93,8 +95,6 @@ NOTE: Steps 1 to 4 below should be performed sequentially.
 python ext_regions.py \
   --source <WSI directory> \
   --save_dir <regions save directory> \
-  --mag_level 20 \
-  --patch_size 4096 \
   --seg \
   --patch \
   --stitch
@@ -117,14 +117,8 @@ python ext_feats_conch_hierar_par.py \
   --checkpoint4k <hipt 4096 model.pth path> \
   --trident_repo ./trident \
   --conch_ckpt_path <conch.bin model path> \
-  --conch_batch_size 128 \
-  --encoder_name conch_v1 \
-  --conch_model_cfg conch_ViT-B-16 \
   --out_dir <features save directory> \
-  --patch_size 256 \
   --extract_patch_features \
-  --n_diss_features 32 \
-  --top_k 16 \
   --all_gpus \
   --workers_per_gpu 1
 ```
@@ -144,14 +138,9 @@ python ext_cell_feat_par.py \
   --selected_indices_dir <features save directory>/patches_filtered \
   --checkpoint <cellvit 256 model.pth path> \
   --output_dir <features save directory>/cells \
-  --batch_size 16 \
-  --magnification 40 \
   --all_gpus \
   --workers_per_gpu 1 \
-  --feature_mode mask_mean \
   --enforce_amp \
-  --save_full_outputs_regions_per_wsi 10 \
-  --full_output_region_selection random
 ```
 
 Note: You may
@@ -168,7 +157,6 @@ python save_patch_images.py \
   --output_dir <features save directory>/sample_images \
   --region_size 4096 \
   --patch_size 256 \
-  --mag_level 20 \
   --max_wsi 2 \
   --max_regions_per_wsi 20 \
   --selection_mode random
@@ -177,9 +165,71 @@ python save_patch_images.py \
 Note:
  * Other customizations are available in the respective python files. You may tweak them to your particular applications.
 
-## Inference
+## Inference MLLM-HWSI
 
-## Training
+* Ensure that your WSI test data has been prepared as discribed in [Data preparation](#data-preparation) above.
+
+
+### 1 Checkpoints Download
+
+* To be released soon... 
+* While we release the checpoints, you may train as described [here](#training).
+
+### 2. Test: Report Generation
+
+```
+python main_test_gen.py \
+  --wsi_dir <WSI directory> \
+  --report_json <Test report json file path> \
+  --wsi_feat_dir <features save directory>/wsi \
+  --region_feat_dir <features save directory>/region_4k \
+  --patch_feat_dir <features save directory>/patches_filtered \
+  --cell_feat_dir <features save directory>/cells \
+  --cell_pt_filename encoded_cell_features.pt \
+  --output_json <output json result path> \
+  --model_name <MLLM-HWSI model folder path> \
+  --pathology_encoder_ckpt <MLLM-HWSI VL-projector path>
+```
+
+### 3. Test: Visual Question and Answer (VQA)
+
+```
+python main_test_vqa.py \
+  --wsi_dir <WSI directory> \
+  --report_json <Test report or conversation json file path> \
+  --wsi_feat_dir <features save directory>/wsi \
+  --region_feat_dir <features save directory>/region_4k \
+  --patch_feat_dir <features save directory>/patches_filtered \
+  --cell_feat_dir <features save directory>/cells \
+  --cell_pt_filename encoded_cell_features.pt \
+  --output_json <output json result path> \
+  --model_name <MLLM-HWSI model folder path> \
+  --pathology_encoder_ckpt <MLLM-HWSI VL-projector path> 
+```
+* Note: Other customizations are available in the respective python files. You may tweak them to your particular applications.
+
+### MLLM-HWSI ChatBot
+
+* To be released soon...
+
+## Training MLLM-HWSI
+
+* Ensure that your WSI training data has been prepared as discribed in [Data preparation](#data-preparation) above.
+
+### Stage 1: Training Heirarchical Multi-Scale Encoders
+
+```
+```
+
+### Stage 2: Training Cross-Modal V-L Projectors
+
+```
+```
+
+### Stage 3: Task-specific Instruction Tuning
+
+```
+```
 
 ## Acknowledgements
 

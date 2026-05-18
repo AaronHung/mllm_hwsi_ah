@@ -231,9 +231,9 @@ def seg_and_patch(source, save_dir, patch_save_dir, mask_save_dir, stitch_save_d
 parser = argparse.ArgumentParser(description='seg and patch')
 parser.add_argument('--source', type = str,
 					help='path to folder containing raw wsi image files')
-parser.add_argument('--step_size', type = int, default=256,
+parser.add_argument('--step_size', type = int, default=4096,
 					help='step_size')
-parser.add_argument('--patch_size', type = int, default=256,
+parser.add_argument('--patch_size', type = int, default=4096,
 					help='patch_size')
 parser.add_argument('--patch', default=False, action='store_true')
 parser.add_argument('--seg', default=False, action='store_true')
