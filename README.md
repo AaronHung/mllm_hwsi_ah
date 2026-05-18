@@ -235,12 +235,8 @@ python main_test_vqa.py \
 
 This work acknowledges the authors of the following repositories:
 
-- [WSI-LLaVA](https://github.com/XinhengLyu/WSI-LLaVA)
-- [CLAM](https://github.com/mahmoodlab/CLAM)
-- [TRIDENT](https://github.com/mahmoodlab/TRIDENT)
-- [HIPT](https://github.com/mahmoodlab/HIPT)
-- [CONCH](https://github.com/mahmoodlab/CONCH)
-- [CellViT](https://github.com/TIO-IKIM/CellViT)
+| [WSI-LLaVA](https://github.com/XinhengLyu/WSI-LLaVA) | [CLAM](https://github.com/mahmoodlab/CLAM) | [TRIDENT](https://github.com/mahmoodlab/TRIDENT) |
+| [HIPT](https://github.com/mahmoodlab/HIPT) | [CONCH](https://github.com/mahmoodlab/CONCH) | [CellViT](https://github.com/TIO-IKIM/CellViT) |
 
 ## Citation
 
