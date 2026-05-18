@@ -2,8 +2,6 @@
 
 # MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding
 
-**Repository under construction...**
-
 - Official repository for our paper MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding
 
 <p align="center">
@@ -165,52 +163,6 @@ python save_patch_images.py \
 Note:
  * Other customizations are available in the respective python files. You may tweak them to your particular applications.
 
-## Inference MLLM-HWSI
-
-* Ensure that your WSI test data has been prepared as discribed in [Data preparation](#data-preparation) above.
-
-
-### 1 Checkpoints Download
-
-* To be released soon... 
-* While we release the checpoints, you may train as described [here](#training-mllm-hwsi).
-
-### 2. Test: Report Generation
-
-```
-python main_test_gen.py \
-  --wsi_dir <Test WSI directory> \
-  --report_json <Test report json file path> \
-  --wsi_feat_dir <features save directory>/wsi \
-  --region_feat_dir <features save directory>/region_4k \
-  --patch_feat_dir <features save directory>/patches_filtered \
-  --cell_feat_dir <features save directory>/cells \
-  --cell_pt_filename encoded_cell_features.pt \
-  --output_json <output json result path> \
-  --model_name <MLLM-HWSI model folder path> \
-  --pathology_encoder_ckpt <MLLM-HWSI VL-projector path>
-```
-
-### 3. Test: Visual Question and Answer (VQA)
-
-```
-python main_test_vqa.py \
-  --wsi_dir <Test WSI directory> \
-  --report_json <Test report or conversation json file path> \
-  --wsi_feat_dir <features save directory>/wsi \
-  --region_feat_dir <features save directory>/region_4k \
-  --patch_feat_dir <features save directory>/patches_filtered \
-  --cell_feat_dir <features save directory>/cells \
-  --cell_pt_filename encoded_cell_features.pt \
-  --output_json <output json result path> \
-  --model_name <MLLM-HWSI model folder path> \
-  --pathology_encoder_ckpt <MLLM-HWSI VL-projector path> 
-```
-* Note: Other customizations are available in the respective python files. You may tweak them to your particular applications.
-
-### MLLM-HWSI ChatBot
-
-* To be released soon...
 
 ## Training MLLM-HWSI
 
@@ -269,6 +221,56 @@ python main_train_LLM_stage3.py \
   --autocast_enabled \
   --save_name <save name.pt>
 ```
+
+## Inference MLLM-HWSI
+
+* Ensure that your WSI test data has been prepared as discribed in [Data preparation](#data-preparation) above.
+
+
+### 1 Checkpoints Download
+
+* Stage 2: [Cross-Modal V-L Projectors](https://drive.google.com/drive/folders/1AroZ52mz4N8_fLaa_EgjpQhpkJ62caET?usp=sharing)
+* Stage 3: [Instruction Tuning](https://drive.google.com/drive/folders/1VUSC77eK0hGPfu5ao6I6cbGUeSxD9KVu?usp=sharing). 
+* For stage 3, extract the the zip file.
+* Note: Current Model Upload Date: 18/05/2026. These models can be updated.
+
+### 2. Test: Report Generation
+
+```
+python main_test_gen.py \
+  --wsi_dir <Test WSI directory> \
+  --report_json <Test report json file path> \
+  --wsi_feat_dir <features save directory>/wsi \
+  --region_feat_dir <features save directory>/region_4k \
+  --patch_feat_dir <features save directory>/patches_filtered \
+  --cell_feat_dir <features save directory>/cells \
+  --cell_pt_filename encoded_cell_features.pt \
+  --output_json <output json result path> \
+  --pathology_encoder_ckpt <MLLM-HWSI VL-projector path (training stage 2)> \
+  --model_name <MLLM-HWSI hf model folder path (training stage 3)> 
+```
+
+### 3. Test: Visual Question and Answer (VQA)
+
+```
+python main_test_vqa.py \
+  --wsi_dir <Test WSI directory> \
+  --report_json <Test report or conversation json file path> \
+  --wsi_feat_dir <features save directory>/wsi \
+  --region_feat_dir <features save directory>/region_4k \
+  --patch_feat_dir <features save directory>/patches_filtered \
+  --cell_feat_dir <features save directory>/cells \
+  --cell_pt_filename encoded_cell_features.pt \
+  --output_json <output json result path> \
+  --pathology_encoder_ckpt <MLLM-HWSI VL-projector path (training stage 2)> \
+  --model_name <MLLM-HWSI hf model folder path (training stage 3)> 
+```
+* Note: Other customizations are available in the respective python files. You may tweak them to your particular applications.
+
+### MLLM-HWSI ChatBot
+
+* To be released soon...
+
 
 ## Acknowledgements
 
