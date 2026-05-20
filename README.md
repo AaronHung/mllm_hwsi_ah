@@ -283,7 +283,6 @@ You may chat with MLLM-HWSI model using the ChatBot.
 python main_vqa_chat.py --port <port_number e.g. 8080>
 ```
 
-
 ## Acknowledgements
 
 This work acknowledges the authors of the following repositories:

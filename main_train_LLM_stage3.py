@@ -103,11 +103,20 @@ class WSITrainDataset(Dataset):
                 if not question or not t_answer:
                     raise KeyError(f"Empty question/answer for {slide_id}")
 
-                # Cheap existence check for feature files
-                _ = os.path.join(self.wsi_feat_dir, f"{slide_id}.pt")
-                _ = os.path.join(self.region_feat_dir, f"{slide_id}.pt")
-                _ = os.path.join(self.patch_feat_dir, f"{slide_id}.pt")
-                _ = os.path.join(self.cell_feat_dir, slide_id, self.cell_pt_filename)
+                # Keep only slides that have all required extracted features.
+                wsi_feat_path = os.path.join(self.wsi_feat_dir, f"{slide_id}.pt")
+                region_feat_path = os.path.join(self.region_feat_dir, f"{slide_id}.pt")
+                patch_feat_path = os.path.join(self.patch_feat_dir, f"{slide_id}.pt")
+                cell_feat_path = os.path.join(self.cell_feat_dir, slide_id, self.cell_pt_filename)
+
+                missing = [
+                    p for p in [wsi_feat_path, region_feat_path, patch_feat_path, cell_feat_path]
+                    if not os.path.isfile(p)
+                ]
+                if missing:
+                    raise FileNotFoundError(
+                        f"Missing extracted features for {slide_id}: {', '.join(missing)}"
+                    )
 
                 samples.append({
                     "slide_id": slide_id,
@@ -978,6 +987,11 @@ def parse_args():
     parser.add_argument("--patch_feat_dir", type=str, required=True)
     parser.add_argument("--cell_feat_dir", type=str, required=True)
     parser.add_argument("--cell_pt_filename", type=str, required=True)
+    parser.add_argument(
+        "--strict_report_match",
+        action="store_true",
+        help="Fail fast if any slide has missing conversation fields or required feature files.",
+    )
     parser.add_argument("--stage2_ckpt", type=str, required=True, help="Path to stage-2 projector checkpoint")
 
     # Model
@@ -1064,6 +1078,7 @@ def main():
         patch_feat_dir=args.patch_feat_dir,
         cell_feat_dir=args.cell_feat_dir,
         cell_pt_filename=args.cell_pt_filename,
+        strict_report_match=args.strict_report_match,
     )
 
     n_total = len(dataset)
