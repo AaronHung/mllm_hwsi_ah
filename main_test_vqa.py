@@ -588,7 +588,7 @@ def main():
             print("QUESTION:")
             print(question)
             print("-" * 80)
-            print("QWEN RESPONSE:")
+            print("MLLM-HWSI RESPONSE:")
             print(response)
             print("-" * 80)
             print("T-ANSWER:")

@@ -86,7 +86,7 @@ def parse_args():
     parser.add_argument("--num_slide_tokens", type=int, default=64)
     parser.add_argument("--projector_type", type=str, default="mlp", choices=["linear", "mlp"])
 
-    parser.add_argument("--max_new_tokens", type=int, default=256)
+    parser.add_argument("--max_new_tokens", type=int, default=512)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top_p", type=float, default=0.9)
     parser.add_argument("--do_sample", action="store_true")
@@ -236,7 +236,7 @@ def main():
             print("QUESTION:")
             print(question)
             print("-" * 80)
-            print("QWEN RESPONSE:")
+            print("MLLM-HWSI RESPONSE:")
             print(response)
             print("-" * 80)
             print("T-ANSWER:")
