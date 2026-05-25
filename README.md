@@ -2,8 +2,7 @@
 
 # MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding
 
-- Official repository for our paper MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding
-- Model available on [huggingFace](https://huggingface.co/Bastech/MLLM-HWSI).
+- Official repository for our paper MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding.
 
 <p align="center">
 <a href="https://arxiv.org/abs/2603.23067"><img src="https://img.shields.io/badge/arXiv-Paper_Link-blue"></a> 
@@ -173,11 +172,11 @@ Note:
  * Other customizations are available in the respective python files. You may tweak them to your particular applications.
 
 
-## Training MLLM-HWSI
+## Training
 
 * Ensure that your WSI training data has been prepared as discribed in [Data preparation](#data-preparation) above.
 
-### Stage 1: Heirarchical Multi-Scale Encoders Pre-training
+### Stage 1: Hierarchical Multi-Scale Encoders Pre-training
 
 * Please refer to [HIPT](https://github.com/mahmoodlab/HIPT), [CONCH](https://github.com/mahmoodlab/CONCH), and [CellViT](https://github.com/TIO-IKIM/CellViT) for the pretraining of the encoders.
 
@@ -193,12 +192,12 @@ python main_train_proj_stage2.py \
   --cell_feat_dir <features save directory>/cells \
   --cell_pt_filename encoded_cell_features.pt \
   --save_dir <checkpoint save directory> \
-  --save_name <vl_projector.pt> \
+  --save_name vl_projector.pt \
   --model_name Qwen/Qwen2.5-7B-Instruct \
   --device cuda \
   --batch_size 1 \
   --lr 1e-6 \
-  --val_ratio 0.2 \
+  --val_ratio 0.1 \
   --num_slide_tokens 64
 ```
 
@@ -214,7 +213,7 @@ python main_train_LLM_stage3.py \
   --cell_feat_dir <features save directory>/cells \
   --cell_pt_filename encoded_cell_features.pt \
   --stage2_ckpt <stage 2 projector saved path> \
-  --save_dir ../MLLM_HWSI_ckpts \
+  --save_dir <directory to save huggingFace model> \
   --model_name Qwen/Qwen2.5-7B-Instruct \
   --lora_r 128 \
   --lora_alpha 256 \
@@ -224,23 +223,18 @@ python main_train_LLM_stage3.py \
   --lr 2e-5 \
   --llm_lr 2e-5 \
   --projector_lr 5e-5 \
-  --grad_accum_steps 4 \
-  --num_slide_tokens 64 \
-  --projector_type mlp \
   --autocast_enabled \
   --save_name <save name.pt>
 ```
 
-## Inference MLLM-HWSI
+## Inference
 
 * Ensure that your WSI test data has been prepared as discribed in [Data preparation](#data-preparation) above.
 
 
 ### 1 Checkpoints Download
 
-* Stage 2: [Cross-Modal V-L Projectors](https://drive.google.com/drive/folders/1AroZ52mz4N8_fLaa_EgjpQhpkJ62caET?usp=sharing)
-* Stage 3: [Instruction Tuning](https://drive.google.com/drive/folders/1VUSC77eK0hGPfu5ao6I6cbGUeSxD9KVu?usp=sharing). 
-* For stage 3, extract the the zip file.
+* You may download HLLM-WSI pretrained model from [huggingface](https://huggingface.co/Bastech/MLLM-HWSI).
 
 ### 2. Test: Report Generation
 
@@ -254,8 +248,7 @@ python main_test_gen.py \
   --cell_feat_dir <features save directory>/cells \
   --cell_pt_filename encoded_cell_features.pt \
   --output_json <output json result path> \
-  --pathology_encoder_ckpt <MLLM-HWSI VL-projector path (training stage 2)> \
-  --model_name <MLLM-HWSI hf model folder path (training stage 3)> 
+  --model_name Bastech/MLLM-HWSI
 ```
 
 ### 3. Test: Visual Question and Answer (VQA)
@@ -270,8 +263,7 @@ python main_test_vqa.py \
   --cell_feat_dir <features save directory>/cells \
   --cell_pt_filename encoded_cell_features.pt \
   --output_json <output json result path> \
-  --pathology_encoder_ckpt <MLLM-HWSI VL-projector path (training stage 2)> \
-  --model_name <MLLM-HWSI hf model folder path (training stage 3)> \ 
+  --model_name Bastech/MLLM-HWSI
   --use_accuracy False
 ```
 * Note: Other customizations are available in the respective python files. You may tweak them to your particular applications.
