@@ -14,16 +14,17 @@ from bert_score import score
 BERTSCORE_MODEL = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
 BERTSCORE_NUM_LAYERS = 9  # optimal layer for BERT-base architecture (per bert_score paper)
 BERTSCORE_MAX_WORDS = 256  # pre-truncate to ~512 tokens (1 word ≈ 2 tokens)
-from mllm_hwsi import VLProjectorConfig, MLLMHWSIQWEN
+from mllm_hwsi import VLProjectorConfig, MLLMHWSI
+from main_utils import (
+    normalize_text,
+    apply_lora_to_llm,
+    normalize_model_source,
+)
 from data_utils import (
     set_seed,
     find_slide_ids,
     load_slide_feature_quadruplet,
 )
-
-
-def normalize_text(text: str) -> str:
-    return " ".join(str(text).strip().split())
 
 
 # =========================================================
@@ -387,6 +388,7 @@ def parse_args():
     parser.add_argument("--length_penalty", type=float, default=1.0)
     parser.add_argument("--no_repeat_ngram_size", type=int, default=3)
 
+    parser.add_argument("--vl_projector_ckpt", type=str, default=None)
     parser.add_argument("--pathology_encoder_ckpt", type=str, default=None)
     parser.add_argument("--llm_lora_ckpt", type=str, default=None)
     parser.add_argument("--lora_r", type=int, default=128)
@@ -396,43 +398,6 @@ def parse_args():
     parser.add_argument("--use_accuracy", type=float, default=False)
 
     return parser.parse_args()
-
-
-def apply_lora_to_llm(model: MLLMHWSIQWEN, lora_r: int, lora_alpha: int, lora_dropout: float) -> None:
-    try:
-        from peft import LoraConfig, TaskType, get_peft_model
-    except ImportError as exc:
-        raise ImportError(
-            "peft is required to load LoRA checkpoints. Install with: pip install peft"
-        ) from exc
-
-    candidate_targets = [
-        "q_proj",
-        "k_proj",
-        "v_proj",
-        "o_proj",
-        "gate_proj",
-        "up_proj",
-        "down_proj",
-    ]
-    linear_leaf_names = {
-        name.split(".")[-1]
-        for name, module in model.llm.named_modules()
-        if isinstance(module, nn.Linear)
-    }
-    target_modules = [name for name in candidate_targets if name in linear_leaf_names]
-    if not target_modules:
-        raise RuntimeError("Could not find LoRA target modules in the loaded LLM.")
-
-    lora_cfg = LoraConfig(
-        task_type=TaskType.CAUSAL_LM,
-        r=lora_r,
-        lora_alpha=lora_alpha,
-        lora_dropout=lora_dropout,
-        bias="none",
-        target_modules=target_modules,
-    )
-    model.llm = get_peft_model(model.llm, lora_cfg)
 
 
 def main():
@@ -463,11 +428,13 @@ def main():
 
     dtype = torch.float16 if args.device.startswith("cuda") else torch.float32
 
-    model = MLLMHWSIQWEN(
-        model_name=args.model_name,
+    model_source = normalize_model_source(args.model_name)
+    model = MLLMHWSI.from_pretrained(
+        source=model_source,
         projector_cfg=cfg,
         device=args.device,
-        torch_dtype=dtype,
+        dtype=dtype,
+        load_projector=True,
     )
 
     if args.llm_lora_ckpt is not None:
@@ -484,12 +451,15 @@ def main():
         print("LoRA missing keys:", missing)
         print("LoRA unexpected keys:", unexpected)
 
-    if args.pathology_encoder_ckpt is not None:
-        ckpt = torch.load(args.pathology_encoder_ckpt, map_location="cpu")
-        if "state_dict" in ckpt:
+    projector_ckpt = args.vl_projector_ckpt or args.pathology_encoder_ckpt
+    if projector_ckpt is not None:
+        ckpt = torch.load(projector_ckpt, map_location="cpu")
+        if isinstance(ckpt, dict) and "vl_projector_state_dict" in ckpt:
+            ckpt = ckpt["vl_projector_state_dict"]
+        elif isinstance(ckpt, dict) and "state_dict" in ckpt:
             ckpt = ckpt["state_dict"]
-        missing, unexpected = model.pathology_encoder.load_state_dict(ckpt, strict=False)
-        print("Loaded pathology encoder checkpoint.")
+        missing, unexpected = model.vl_projector.load_state_dict(ckpt, strict=False)
+        print("Loaded VL projector checkpoint override.")
         print("Missing keys:", missing)
         print("Unexpected keys:", unexpected)
 

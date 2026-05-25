@@ -3,6 +3,7 @@
 # MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding
 
 - Official repository for our paper MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding
+- Model available on [huggingFace](https://huggingface.co/Bastech/MLLM-HWSI).
 
 <p align="center">
 <a href="https://arxiv.org/abs/2603.23067"><img src="https://img.shields.io/badge/arXiv-Paper_Link-blue"></a> 
@@ -192,7 +193,7 @@ python main_train_proj_stage2.py \
   --cell_feat_dir <features save directory>/cells \
   --cell_pt_filename encoded_cell_features.pt \
   --save_dir <checkpoint save directory> \
-  --save_name <projector save name.pt> \
+  --save_name <vl_projector.pt> \
   --model_name Qwen/Qwen2.5-7B-Instruct \
   --device cuda \
   --batch_size 1 \
@@ -217,7 +218,7 @@ python main_train_LLM_stage3.py \
   --model_name Qwen/Qwen2.5-7B-Instruct \
   --lora_r 128 \
   --lora_alpha 256 \
-  --epochs 5 \
+  --epochs 50 \
   --batch_size 1 \
   --val_ratio 0.1 \
   --lr 2e-5 \
@@ -295,6 +296,16 @@ This work acknowledges the authors of the following repositories:
 If you find our work useful in your research, please consider citing:
 
 ```
+
+@InProceedings{Alawode_2026_CVPR,
+    author    = {Alawode, Basit and Mahmood, Arif and Al Radi, Muaz Khalifa and Albastaki, Shahad and Khan, Asim and Bilal, Muhammad and Abdalla, Moshira Ali and Bennamoun, Mohammed and Javed, Sajid},
+    title     = {MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding},
+    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+    month     = {June},
+    year      = {2026},
+    pages     = {13732-13743}
+}
+
 @article{alawode2026mllmhwsi,
       title={MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding}, 
       author={Basit Alawode and Arif Mahmood and Muaz Khalifa Al-Radi and Shahad Albastaki and Asim Khan and Muhammad Bilal and Moshira Ali Abdalla and Mohammed Bennamoun and Sajid Javed},

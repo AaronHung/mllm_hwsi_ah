@@ -2,12 +2,15 @@
 # -*- coding: utf-8 -*-
 
 import math
+import json
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, Union, Tuple
 
 import torch
 import torch.nn as nn
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from huggingface_hub import hf_hub_download
 
 
 @dataclass
@@ -270,6 +273,140 @@ class MultiLevelProjectorEncoder(nn.Module):
             dropout=cfg.dropout,
         )
 
+    @classmethod
+    def from_pretrained(
+        cls,
+        source: str,
+        cfg: Optional[VLProjectorConfig] = None,
+        *,
+        filename: str = "vl_projector.pt",
+        revision: Optional[str] = None,
+        map_location: Union[str, torch.device] = "cpu",
+        strict: bool = False,
+        device: Optional[Union[str, torch.device]] = None,
+        dtype: Optional[torch.dtype] = None,
+        local_files_only: bool = False,
+        token: Optional[str] = None,
+        return_loading_info: bool = False,
+    ):
+        def _extract_state_dict(payload):
+            if isinstance(payload, dict):
+                if "vl_projector_state_dict" in payload:
+                    return payload["vl_projector_state_dict"]
+                if "pathology_encoder_state_dict" in payload:
+                    return payload["pathology_encoder_state_dict"]
+                if "state_dict" in payload:
+                    return payload["state_dict"]
+            return payload
+
+        def _try_read_cfg_from_payload(payload):
+            if isinstance(payload, dict) and isinstance(payload.get("projector_cfg"), dict):
+                return VLProjectorConfig(**payload["projector_cfg"])
+            return None
+
+        def _load_cfg_from_json(path: Path) -> Optional[VLProjectorConfig]:
+            if not path.is_file():
+                return None
+            try:
+                with path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return VLProjectorConfig(**data)
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                return None
+            return None
+
+        source_path = Path(source).expanduser()
+        payload = None
+        resolved_cfg = cfg
+
+        if source_path.exists():
+            if source_path.is_file():
+                ckpt_path = source_path
+            else:
+                candidates = [
+                    source_path / filename,
+                    source_path / "vl_projector.pt",
+                    source_path / "best_vl_projector.pt",
+                    source_path / "pytorch_model.bin",
+                ]
+                ckpt_path = next((p for p in candidates if p.is_file()), None)
+                if ckpt_path is None:
+                    raise FileNotFoundError(
+                        f"No projector checkpoint found in {source_path}. "
+                        f"Tried: {[str(p.name) for p in candidates]}"
+                    )
+
+            payload = torch.load(ckpt_path, map_location=map_location)
+            if resolved_cfg is None:
+                resolved_cfg = _try_read_cfg_from_payload(payload)
+            if resolved_cfg is None and source_path.is_dir():
+                resolved_cfg = _load_cfg_from_json(source_path / "projector_config.json")
+        else:
+            repo_id = source
+            cfg_path = None
+            if resolved_cfg is None:
+                try:
+                    cfg_path = hf_hub_download(
+                        repo_id=repo_id,
+                        filename="projector_config.json",
+                        revision=revision,
+                        token=token,
+                        local_files_only=local_files_only,
+                    )
+                except Exception:
+                    cfg_path = None
+                if cfg_path is not None:
+                    resolved_cfg = _load_cfg_from_json(Path(cfg_path))
+
+            candidate_files = [filename, "vl_projector.pt", "best_vl_projector.pt", "pytorch_model.bin"]
+            last_err = None
+            ckpt_path = None
+            for candidate in candidate_files:
+                try:
+                    ckpt_path = hf_hub_download(
+                        repo_id=repo_id,
+                        filename=candidate,
+                        revision=revision,
+                        token=token,
+                        local_files_only=local_files_only,
+                    )
+                    break
+                except Exception as exc:
+                    last_err = exc
+            if ckpt_path is None:
+                raise FileNotFoundError(
+                    f"Could not download projector checkpoint from repo '{repo_id}'. "
+                    f"Tried files: {candidate_files}. Last error: {last_err}"
+                )
+            payload = torch.load(ckpt_path, map_location=map_location)
+            if resolved_cfg is None:
+                resolved_cfg = _try_read_cfg_from_payload(payload)
+
+        if resolved_cfg is None:
+            raise ValueError(
+                "Projector config not found. Pass cfg=VLProjectorConfig(...) explicitly, "
+                "or include projector_cfg/projector_config.json in checkpoint artifacts."
+            )
+
+        model = cls(resolved_cfg)
+        state_dict = _extract_state_dict(payload)
+        missing, unexpected = model.load_state_dict(state_dict, strict=strict)
+
+        if device is not None and dtype is not None:
+            model = model.to(device=device, dtype=dtype)
+        elif device is not None:
+            model = model.to(device=device)
+        elif dtype is not None:
+            model = model.to(dtype=dtype)
+
+        if return_loading_info:
+            return model, {
+                "missing_keys": list(missing),
+                "unexpected_keys": list(unexpected),
+            }
+        return model
+
     def forward(
         self,
         wsi: torch.Tensor,      # (B, 192)
@@ -307,16 +444,20 @@ class MultiLevelProjectorEncoder(nn.Module):
         return slide_tokens
 
 
-class MLLMHWSIQWEN(nn.Module):
+class MLLMHWSI(nn.Module):
     def __init__(
         self,
         model_name: str,
         projector_cfg: VLProjectorConfig,
         device: str = "cuda",
         torch_dtype: torch.dtype = torch.float16,
+        dtype: Optional[torch.dtype] = None,
     ):
         super().__init__()
         self.device = device
+        self.projector_cfg = projector_cfg
+        if dtype is not None:
+            torch_dtype = dtype
 
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -343,16 +484,102 @@ class MLLMHWSIQWEN(nn.Module):
 
         self.llm = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch_dtype,
+            dtype=torch_dtype,
             trust_remote_code=True,
         ).to(device)
 
-        #self.pathology_encoder = MultiLevelProjectorEncoder(projector_cfg).to(device=device, dtype=torch_dtype)
-        self.pathology_encoder = MultiLevelProjectorEncoder(projector_cfg).to(device=device, dtype=torch.float32) # keep pathology encoder in fp32 for stability
+        # Keep VL projector in fp32 for stability; load projector weights explicitly via checkpoint.
+        self.vl_projector = MultiLevelProjectorEncoder(projector_cfg).to(device=device, dtype=torch.float32)
         self.embed_tokens = self.llm.get_input_embeddings()
 
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+
+    @property
+    def pathology_encoder(self):
+        return self.vl_projector
+
+    @pathology_encoder.setter
+    def pathology_encoder(self, value):
+        self.vl_projector = value
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        source: str,
+        projector_cfg: Optional[VLProjectorConfig] = None,
+        device: str = "cuda",
+        dtype: torch.dtype = torch.float16,
+        revision: Optional[str] = None,
+        token: Optional[str] = None,
+        local_files_only: bool = False,
+        strict_projector: bool = False,
+        load_projector: bool = True,
+        projector_filename: str = "vl_projector.pt",
+        return_loading_info: bool = False,
+    ):
+        source_path = Path(source).expanduser()
+
+        resolved_cfg = projector_cfg
+        cfg_path: Optional[Path] = None
+
+        if resolved_cfg is None:
+            if source_path.is_dir():
+                local_cfg = source_path / "projector_config.json"
+                if local_cfg.is_file():
+                    cfg_path = local_cfg
+            elif not source_path.exists():
+                try:
+                    downloaded_cfg = hf_hub_download(
+                        repo_id=source,
+                        filename="projector_config.json",
+                        revision=revision,
+                        token=token,
+                        local_files_only=local_files_only,
+                    )
+                    cfg_path = Path(downloaded_cfg)
+                except Exception:
+                    cfg_path = None
+
+            if cfg_path is not None:
+                with cfg_path.open("r", encoding="utf-8") as f:
+                    cfg_data = json.load(f)
+                resolved_cfg = VLProjectorConfig(**cfg_data)
+
+        if resolved_cfg is None:
+            raise ValueError(
+                "projector_cfg is required when projector_config.json is unavailable."
+            )
+
+        model = cls(
+            model_name=source,
+            projector_cfg=resolved_cfg,
+            device=device,
+            dtype=dtype,
+        )
+
+        load_info = None
+        if load_projector:
+            projector, load_info = MultiLevelProjectorEncoder.from_pretrained(
+                source=source,
+                cfg=resolved_cfg,
+                filename=projector_filename,
+                revision=revision,
+                token=token,
+                local_files_only=local_files_only,
+                strict=strict_projector,
+                map_location="cpu",
+                device=device,
+                dtype=torch.float32,
+                return_loading_info=True,
+            )
+            model.vl_projector = projector
+
+        if return_loading_info:
+            return model, {
+                "vl_projector": load_info,
+            }
+        return model
 
     def format_chat(self, prompt: str) -> str:
         messages = [
@@ -371,6 +598,31 @@ class MLLMHWSIQWEN(nn.Module):
             "<|user|>\n" + prompt + "\n"
             "<|assistant|>\n"
         )
+
+    def save_pretrained(self, save_directory: str) -> None:
+        save_dir = Path(save_directory)
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save LLM and tokenizer in standard HF layout.
+        self.llm.save_pretrained(str(save_dir))
+        self.tokenizer.save_pretrained(str(save_dir))
+
+        # Save VL projector weights and config alongside HF artifacts.
+        projector_payload = {
+            "vl_projector_state_dict": self.vl_projector.state_dict(),
+        }
+        torch.save(projector_payload, save_dir / "vl_projector.pt")
+
+        projector_cfg = {
+            "llm_dim": int(self.projector_cfg.llm_dim),
+            "hidden_dim": int(self.projector_cfg.hidden_dim),
+            "dropout": float(self.projector_cfg.dropout),
+            "use_layernorm": bool(self.projector_cfg.use_layernorm),
+            "num_query_tokens": int(self.projector_cfg.num_query_tokens),
+            "projector_type": str(self.projector_cfg.projector_type),
+        }
+        with (save_dir / "projector_config.json").open("w", encoding="utf-8") as f:
+            json.dump(projector_cfg, f, indent=2)
 
     @torch.no_grad()
     def generate_from_features(
@@ -393,7 +645,7 @@ class MLLMHWSIQWEN(nn.Module):
         no_repeat_ngram_size: int = 0,
     ) -> str:
         llm_dtype = next(self.llm.parameters()).dtype
-        encoder_dtype = next(self.pathology_encoder.parameters()).dtype
+        encoder_dtype = next(self.vl_projector.parameters()).dtype
 
         wsi = wsi.to(self.device, dtype=encoder_dtype)
         region = region.to(self.device, dtype=encoder_dtype)
@@ -407,7 +659,7 @@ class MLLMHWSIQWEN(nn.Module):
         if cell_mask is not None:
             cell_mask = cell_mask.to(self.device)
 
-        slide_tokens = self.pathology_encoder(
+        slide_tokens = self.vl_projector(
             wsi=wsi,
             region=region,
             patch=patch,

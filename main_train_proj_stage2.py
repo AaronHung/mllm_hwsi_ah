@@ -15,7 +15,8 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from transformers import get_linear_schedule_with_warmup
 
-from mllm_hwsi import VLProjectorConfig, MLLMHWSIQWEN
+from mllm_hwsi import VLProjectorConfig, MLLMHWSI
+import main_utils as _mu
 from data_utils import (
     find_slide_ids,
     read_slide_report,
@@ -226,472 +227,57 @@ class WSITrainDataset(Dataset):
         }
 
 
-def collate_wsis(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Pads variable number of regions R and variable valid-cell count C across batch.
-
-    Output shapes:
-      wsi         : (B, 192)
-      region      : (B, Rmax, 192)
-      patch       : (B, Rmax, Cmax, 512)
-      cell        : (B, Rmax, Cmax, 384)
-      region_mask : (B, Rmax)          1=valid region, 0=pad
-      cell_mask   : (B, Rmax, Cmax)    1=valid cell slot, 0=pad
-    """
-    if len(batch) == 0:
-        raise ValueError("Empty batch passed to collate_wsis.")
-
-    bsz = len(batch)
-    r_max = max(item["region"].shape[0] for item in batch)
-
-    # max valid-cell count across all kept regions in the batch
-    c_max = 1
-    for item in batch:
-        for cell_region in item["cell_list"]:
-            c_max = max(c_max, int(cell_region.shape[0]))
-
-    wsi = torch.stack([item["wsi"] for item in batch], dim=0)  # (B, 192)
-
-    region = torch.zeros(bsz, r_max, 192, dtype=torch.float32)
-    patch = torch.zeros(bsz, r_max, c_max, 512, dtype=torch.float32)
-    cell = torch.zeros(bsz, r_max, c_max, 384, dtype=torch.float32)
-
-    region_mask = torch.zeros(bsz, r_max, dtype=torch.bool)
-    cell_mask = torch.zeros(bsz, r_max, c_max, dtype=torch.bool)
-
-    slide_ids: List[str] = []
-    questions: List[str] = []
-    answers: List[str] = []
-
-    for i, item in enumerate(batch):
-        r = item["region"].shape[0]
-        region[i, :r] = item["region"]
-        region_mask[i, :r] = True
-
-        for rr in range(r):
-            patch_rr = item["patch_list"][rr]   # (C_rr, 512)
-            cell_rr = item["cell_list"][rr]     # (C_rr, 384)
-
-            c = patch_rr.shape[0]
-            if c == 0:
-                # Should never happen because empty-cell regions were already dropped,
-                # but keep this guard anyway.
-                continue
-
-            patch[i, rr, :c] = patch_rr
-            cell[i, rr, :c] = cell_rr
-            cell_mask[i, rr, :c] = True
-
-        slide_ids.append(item["slide_id"])
-        questions.append(item["question"])
-        answers.append(item["answer"])
-
-    return {
-        "slide_ids": slide_ids,
-        "questions": questions,
-        "answers": answers,
-        "wsi": wsi,
-        "region": region,
-        "patch": patch,
-        "cell": cell,
-        "region_mask": region_mask,
-        "cell_mask": cell_mask,
-    }
+collate_wsis = _mu.collate_wsis
 
 
 # =========================================================
 # Losses
 # =========================================================
 
-def masked_mean(
-    x: torch.Tensor,
-    mask: Optional[torch.Tensor],
-    dims,
-) -> torch.Tensor:
-    """
-    Mean over one or more dims with boolean mask support.
-
-    Examples
-    --------
-    x:    (B, R, C, D)
-    mask: (B, R, C)
-    dims=(1,2) -> (B, D)
-
-    x:    (B, R, D)
-    mask: (B, R)
-    dims=1 -> (B, D)
-    """
-    if mask is None:
-        return x.mean(dim=dims)
-
-    if isinstance(dims, int):
-        dims = (dims,)
-    dims = tuple(sorted(dims))
-
-    mask = mask.to(x.dtype)
-    while mask.ndim < x.ndim:
-        mask = mask.unsqueeze(-1)
-
-    num = x * mask
-    den = mask
-
-    # reduce dims in reverse order to preserve indexing
-    for d in sorted(dims, reverse=True):
-        num = num.sum(dim=d)
-        den = den.sum(dim=d)
-
-    den = den.clamp_min(1e-6)
-    return num / den
+masked_mean = _mu.masked_mean
 
 
-def sentence_split(text: str) -> List[str]:
-    # Lightweight sentence split to avoid extra deps.
-    text = text.replace("\n", " ").strip()
-    if not text:
-        return []
-    parts: List[str] = []
-    cur = []
-    for ch in text:
-        cur.append(ch)
-        if ch in ".!?;":
-            s = "".join(cur).strip()
-            if s:
-                parts.append(s)
-            cur = []
-    if cur:
-        s = "".join(cur).strip()
-        if s:
-            parts.append(s)
-    return parts if parts else [text]
+sentence_split = _mu.sentence_split
 
 
-def make_phrase_chunks(tokens: List[str], chunk_size: int = 4) -> List[str]:
-    if not tokens:
-        return []
-    chunks = []
-    for i in range(0, len(tokens), chunk_size):
-        chunk = " ".join(tokens[i:i + chunk_size]).strip()
-        if chunk:
-            chunks.append(chunk)
-    return chunks
+make_phrase_chunks = _mu.make_phrase_chunks
 
 
-def pool_text_embedding_from_string(
-    tokenizer,
-    embed_tokens: nn.Module,
-    text: str,
-    device: torch.device,
-    dtype: torch.dtype,
-) -> torch.Tensor:
-    """
-    Frozen embedding-space text representation via input embeddings mean-pool.
-    Returns: (D,)
-    """
-    toks = tokenizer(
-        text,
-        return_tensors="pt",
-        add_special_tokens=False,
-        truncation=True,
-    )
-    input_ids = toks["input_ids"].to(device)
-    if input_ids.numel() == 0:
-        # fallback to EOS token embedding if empty
-        eos_id = tokenizer.eos_token_id
-        input_ids = torch.tensor([[eos_id]], device=device)
-
-    embeds = embed_tokens(input_ids).to(dtype=dtype)  # (1, T, D)
-    return embeds.mean(dim=1).squeeze(0)  # (D,)
+pool_text_embedding_from_string = _mu.pool_text_embedding_from_string
 
 
-def build_hierarchical_text_reps(
-    tokenizer,
-    embed_tokens: nn.Module,
-    answers: List[str],
-    device: torch.device,
-    dtype: torch.dtype,
-) -> Dict[str, torch.Tensor]:
-    """
-    Creates one text representation per scale:
-      - cell   ~ word-level
-      - patch  ~ phrase-level
-      - region ~ sentence-level
-      - wsi    ~ paragraph-level
-    """
-    cell_reps = []
-    patch_reps = []
-    region_reps = []
-    wsi_reps = []
-
-    for ans in answers:
-        ans = ans.strip()
-        words = ans.split()
-        phrases = make_phrase_chunks(words, chunk_size=4)
-        sentences = sentence_split(ans)
-
-        word_text = " ".join(words) if words else ans
-        phrase_text = " ".join(phrases) if phrases else ans
-        sentence_text = " ".join(sentences) if sentences else ans
-        para_text = ans
-
-        cell_reps.append(pool_text_embedding_from_string(tokenizer, embed_tokens, word_text, device, dtype))
-        patch_reps.append(pool_text_embedding_from_string(tokenizer, embed_tokens, phrase_text, device, dtype))
-        region_reps.append(pool_text_embedding_from_string(tokenizer, embed_tokens, sentence_text, device, dtype))
-        wsi_reps.append(pool_text_embedding_from_string(tokenizer, embed_tokens, para_text, device, dtype))
-
-    return {
-        "cell": torch.stack(cell_reps, dim=0),
-        "patch": torch.stack(patch_reps, dim=0),
-        "region": torch.stack(region_reps, dim=0),
-        "wsi": torch.stack(wsi_reps, dim=0),
-    }
+build_hierarchical_text_reps = _mu.build_hierarchical_text_reps
 
 
-def info_nce_bidirectional(
-    image_feats: torch.Tensor,   # (B, D)
-    text_feats: torch.Tensor,    # (B, D)
-    temperature: float = 0.07,
-) -> torch.Tensor:
-    """
-    Symmetric CLIP-style InfoNCE with a stable single-sample fallback.
-
-    Notes
-    -----
-    - For B >= 2: standard bidirectional cross-entropy over in-batch negatives.
-    - For B == 1: InfoNCE has no negatives; we fall back to cosine distance
-      so the projector still receives a useful alignment signal.
-    """
-    if image_feats.ndim != 2 or text_feats.ndim != 2:
-        raise ValueError(
-            f"Expected 2D tensors (B, D), got image={tuple(image_feats.shape)}, "
-            f"text={tuple(text_feats.shape)}"
-        )
-    if image_feats.shape != text_feats.shape:
-        raise ValueError(
-            f"image_feats and text_feats must have the same shape, got "
-            f"{tuple(image_feats.shape)} vs {tuple(text_feats.shape)}"
-        )
-
-    if temperature <= 0:
-        raise ValueError(f"temperature must be > 0, got {temperature}")
-
-    batch_size = image_feats.size(0)
-
-    # Keep cosine similarities and logits numerically stable under bf16/fp16.
-    image_feats = F.normalize(image_feats.float(), dim=-1, eps=1e-6)
-    text_feats = F.normalize(text_feats.float(), dim=-1, eps=1e-6)
-
-    if batch_size == 1:
-        return 1.0 - (image_feats * text_feats).sum(dim=-1).mean()
-
-    logits = (image_feats @ text_feats.t()) / temperature
-    targets = torch.arange(batch_size, device=logits.device)
-
-    loss_i2t = F.cross_entropy(logits, targets)
-    loss_t2i = F.cross_entropy(logits.t(), targets)
-    return 0.5 * (loss_i2t + loss_t2i)
+info_nce_bidirectional = _mu.info_nce_bidirectional
 
 
-def hierarchical_contrastive_loss(
-    visual_reps: Dict[str, torch.Tensor],
-    text_reps: Dict[str, torch.Tensor],
-    temperature: float = 0.07,
-) -> Tuple[torch.Tensor, Dict[str, float]]:
-    """
-    Contrastive alignment at four scales:
-      cell <-> word
-      patch <-> phrase
-      region <-> sentence
-      wsi <-> paragraph
-    """
-    loss_cell = info_nce_bidirectional(visual_reps["cell"], text_reps["cell"], temperature)
-    loss_patch = info_nce_bidirectional(visual_reps["patch"], text_reps["patch"], temperature)
-    loss_region = info_nce_bidirectional(visual_reps["region"], text_reps["region"], temperature)
-    loss_wsi = info_nce_bidirectional(visual_reps["wsi"], text_reps["wsi"], temperature)
-
-    loss = (loss_cell + loss_patch + loss_region + loss_wsi) / 4.0
-    stats = {
-        "contrast_cell": float(loss_cell.detach().item()),
-        "contrast_patch": float(loss_patch.detach().item()),
-        "contrast_region": float(loss_region.detach().item()),
-        "contrast_wsi": float(loss_wsi.detach().item()),
-    }
-    return loss, stats
+hierarchical_contrastive_loss = _mu.hierarchical_contrastive_loss
 
 
-def cross_scale_consistency_loss(visual_reps: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, float]]:
-    """
-    Adjacent-scale semantic consistency:
-      cell ~ patch
-      patch ~ region
-      region ~ wsi
-    """
-    v_cell = F.normalize(visual_reps["cell"], dim=-1)
-    v_patch = F.normalize(visual_reps["patch"], dim=-1)
-    v_region = F.normalize(visual_reps["region"], dim=-1)
-    v_wsi = F.normalize(visual_reps["wsi"], dim=-1)
-
-    loss_cp = 1.0 - (v_cell * v_patch).sum(dim=-1).mean()
-    loss_pr = 1.0 - (v_patch * v_region).sum(dim=-1).mean()
-    loss_rw = 1.0 - (v_region * v_wsi).sum(dim=-1).mean()
-
-    loss = (loss_cp + loss_pr + loss_rw) / 3.0
-    stats = {
-        "cons_cell_patch": float(loss_cp.detach().item()),
-        "cons_patch_region": float(loss_pr.detach().item()),
-        "cons_region_wsi": float(loss_rw.detach().item()),
-    }
-    return loss, stats
+cross_scale_consistency_loss = _mu.cross_scale_consistency_loss
 
 
 # =========================================================
 # Training helpers
 # =========================================================
 
-def freeze_llm(model: MLLMHWSIQWEN) -> None:
+def freeze_llm(model: MLLMHWSI) -> None:
     for p in model.llm.parameters():
         p.requires_grad = False
     for p in model.embed_tokens.parameters():
         p.requires_grad = False
 
 
-def get_visual_scale_reps(
-    model: MLLMHWSIQWEN,
-    wsi: torch.Tensor,
-    region: torch.Tensor,
-    patch: torch.Tensor,
-    cell: torch.Tensor,
-    region_mask: Optional[torch.Tensor] = None,
-    cell_mask: Optional[torch.Tensor] = None,
-    device: torch.device = torch.device("cuda")
-) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    """
-    Runs the pathology encoder submodules explicitly to get:
-      - slide_tokens: (B, M, D)
-      - scale reps  : (B, D) for cell/patch/region/wsi
-
-    patch/cell are padded on C dimension. cell_mask specifies which
-    (B, R, C) entries are real.
-    """
-    pe = model.pathology_encoder
-    encoder_dtype = next(pe.parameters()).dtype
-
-    wsi_token = pe.wsi_proj(wsi.to(dtype=encoder_dtype))                # (B, 1, D)
-    region_tokens = pe.region_proj(region.to(dtype=encoder_dtype))      # (B, R, D)
-    patch_tokens = pe.patch_proj(patch.to(dtype=encoder_dtype))         # (B, R, C, D)
-    cell_tokens = pe.cell_proj(cell.to(dtype=encoder_dtype))            # (B, R, C, D)
-
-    # Zero-out padded slots explicitly so downstream ops do not see junk
-    if cell_mask is not None:
-        mask4 = cell_mask.unsqueeze(-1).to(patch_tokens.dtype)   # (B, R, C, 1)
-        patch_tokens = patch_tokens * mask4
-        cell_tokens = cell_tokens * mask4
-
-    fused_region_tokens = pe.fusion(
-        wsi_token=wsi_token,
-        region_tokens=region_tokens,
-        patch_tokens=patch_tokens,
-        cell_tokens=cell_tokens,
-    )                                           # (B, R, D)
-
-    slide_tokens = pe.compressor(fused_region_tokens, mask=region_mask)  # (B, M, D)
-
-    # Scale-level pooled visual representations using masks
-    cell_repr = masked_mean(cell_tokens, cell_mask, dims=(1, 2))         # (B, D)
-    patch_repr = masked_mean(patch_tokens, cell_mask, dims=(1, 2))       # (B, D)
-    region_repr = masked_mean(region_tokens, region_mask, dims=1)        # (B, D)
-    wsi_repr = wsi_token.squeeze(1)                                      # (B, D)
-
-    visual_reps = {
-        "cell": cell_repr,
-        "patch": patch_repr,
-        "region": region_repr,
-        "wsi": wsi_repr,
-    }
-    return slide_tokens, visual_reps
+get_visual_scale_reps = _mu.get_visual_scale_reps
 
 
-def build_training_batch_inputs(
-    model: MLLMHWSIQWEN,
-    slide_tokens: torch.Tensor,       # (B, M, D)
-    questions: List[str],
-    answers: List[str],
-    device: torch.device,
-    dtype: torch.dtype,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Builds:
-      inputs_embeds: (B, L, D)
-      attention_mask: (B, L)
-      labels: (B, L) with answer-only supervision
-
-    Sequence layout:
-      [ pathology_prefix | prompt_chat_tokens | answer_tokens ]
-    """
-    tokenizer = model.tokenizer
-    embed_tokens = model.embed_tokens
-
-    all_embeds = []
-    all_attn = []
-    all_labels = []
-
-    bsz = len(questions)
-
-    for i in range(bsz):
-        prompt = build_prompt(questions[i])
-        prompt_chat = model.format_chat(prompt)
-
-        prompt_tok = tokenizer(
-            prompt_chat,
-            return_tensors="pt",
-            add_special_tokens=False,
-            truncation=True,
-        )
-        answer_tok = tokenizer(
-            answers[i] + (tokenizer.eos_token or ""),
-            return_tensors="pt",
-            add_special_tokens=False,
-            truncation=True,
-        )
-
-        prompt_ids = prompt_tok["input_ids"].to(device)
-        answer_ids = answer_tok["input_ids"].to(device)
-
-        prompt_embeds = embed_tokens(prompt_ids).to(dtype=dtype)   # (1, Tp, D)
-        answer_embeds = embed_tokens(answer_ids).to(dtype=dtype)   # (1, Ta, D)
-
-        vis = slide_tokens[i:i+1]                                  # (1, M, D)
-        vis = vis.to(dtype=dtype)
-        inp = torch.cat([vis, prompt_embeds, answer_embeds], dim=1)
-
-        attn = torch.ones(inp.shape[:2], dtype=torch.long, device=device)
-
-        labels = torch.full((1, inp.shape[1]), -100, dtype=torch.long, device=device)
-        ans_start = vis.shape[1] + prompt_embeds.shape[1]
-        labels[:, ans_start:ans_start + answer_ids.shape[1]] = answer_ids
-
-        all_embeds.append(inp)
-        all_attn.append(attn)
-        all_labels.append(labels)
-
-    max_len = max(x.shape[1] for x in all_embeds)
-    d = all_embeds[0].shape[-1]
-
-    batch_embeds = torch.zeros(bsz, max_len, d, dtype=dtype, device=device)
-    batch_attn = torch.zeros(bsz, max_len, dtype=torch.long, device=device)
-    batch_labels = torch.full((bsz, max_len), -100, dtype=torch.long, device=device)
-
-    for i in range(bsz):
-        cur_len = all_embeds[i].shape[1]
-        batch_embeds[i, :cur_len] = all_embeds[i][0]
-        batch_attn[i, :cur_len] = all_attn[i][0]
-        batch_labels[i, :cur_len] = all_labels[i][0]
-
-    return batch_embeds, batch_attn, batch_labels
+build_training_batch_inputs = _mu.build_training_batch_inputs
 
 
-def save_pathology_encoder_checkpoint(
+def save_vl_projector_checkpoint(
     save_path: str,
-    model: MLLMHWSIQWEN,
+    model: MLLMHWSI,
     optimizer: torch.optim.Optimizer,
     scheduler,
     epoch: int,
@@ -702,7 +288,8 @@ def save_pathology_encoder_checkpoint(
 ):
     os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
     payload = {
-        "state_dict": model.pathology_encoder.state_dict(),
+        "state_dict": model.vl_projector.state_dict(),
+        "vl_projector_state_dict": model.vl_projector.state_dict(),
         "optimizer": optimizer.state_dict(),
         "scheduler": None if scheduler is None else scheduler.state_dict(),
         "epoch": epoch,
@@ -714,22 +301,11 @@ def save_pathology_encoder_checkpoint(
     torch.save(payload, save_path)
 
 
-def save_best_model_metadata(
-    json_path: str,
-    model_path: str,
-    best_epoch: int,
-    best_val_loss: float,
-    epoch_history: List[Dict[str, float]],
-):
-    os.makedirs(os.path.dirname(json_path) or ".", exist_ok=True)
-    payload = {
-        "model_path": model_path,
-        "best_epoch": best_epoch,
-        "best_val_loss": best_val_loss,
-        "epoch_history": epoch_history,
-    }
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+def save_pathology_encoder_checkpoint(*args, **kwargs):
+    return save_vl_projector_checkpoint(*args, **kwargs)
+
+
+save_best_model_metadata = _mu.save_best_model_metadata
 
 
 # =========================================================
@@ -737,7 +313,7 @@ def save_best_model_metadata(
 # =========================================================
 
 def run_epoch(
-    model: MLLMHWSIQWEN,
+    model: MLLMHWSI,
     loader: DataLoader,
     optimizer: Optional[torch.optim.Optimizer],
     scheduler,
@@ -751,7 +327,7 @@ def run_epoch(
     autocast_enabled: bool,
 ) -> Dict[str, float]:
     is_train = optimizer is not None
-    model.pathology_encoder.train(is_train)
+    model.vl_projector.train(is_train)
     model.llm.eval()  # always frozen
 
     autocast_enabled = bool(autocast_enabled and device.type == "cuda")
@@ -833,7 +409,7 @@ def run_epoch(
 
             if (step + 1) % grad_accum_steps == 0:
                 scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.pathology_encoder.parameters(), max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(model.vl_projector.parameters(), max_grad_norm)
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad(set_to_none=True)
@@ -848,7 +424,7 @@ def run_epoch(
 
     if is_train and (n_steps % grad_accum_steps) != 0:
         scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.pathology_encoder.parameters(), max_grad_norm)
+        torch.nn.utils.clip_grad_norm_(model.vl_projector.parameters(), max_grad_norm)
         scaler.step(optimizer)
         scaler.update()
         optimizer.zero_grad(set_to_none=True)
@@ -923,7 +499,7 @@ def parse_args():
 
     # Save
     parser.add_argument("--save_dir", type=str, required=True)
-    parser.add_argument("--save_name", type=str, default="pathology_encoder.pt")
+    parser.add_argument("--save_name", type=str, default="vl_projector.pt")
     parser.add_argument("--resume_ckpt", type=str, default=None)
 
     return parser.parse_args()
@@ -985,7 +561,7 @@ def main():
         collate_fn=collate_wsis,
     ) if n_val > 0 else None
 
-    model = MLLMHWSIQWEN(
+    model = MLLMHWSI(
         model_name=args.model_name,
         projector_cfg=cfg,
         device=str(device),
@@ -994,7 +570,7 @@ def main():
 
     freeze_llm(model)
 
-    trainable_params = [p for p in model.pathology_encoder.parameters() if p.requires_grad]
+    trainable_params = [p for p in model.vl_projector.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(
         trainable_params,
         lr=args.lr,
@@ -1017,8 +593,13 @@ def main():
 
     if args.resume_ckpt:
         ckpt = torch.load(args.resume_ckpt, map_location="cpu")
-        state_dict = ckpt["state_dict"] if "state_dict" in ckpt else ckpt
-        missing, unexpected = model.pathology_encoder.load_state_dict(state_dict, strict=False)
+        if isinstance(ckpt, dict) and "vl_projector_state_dict" in ckpt:
+            state_dict = ckpt["vl_projector_state_dict"]
+        elif isinstance(ckpt, dict) and "state_dict" in ckpt:
+            state_dict = ckpt["state_dict"]
+        else:
+            state_dict = ckpt
+        missing, unexpected = model.vl_projector.load_state_dict(state_dict, strict=False)
         print(f"[Resume] missing keys: {missing}")
         print(f"[Resume] unexpected keys: {unexpected}")
 
@@ -1109,7 +690,7 @@ def main():
             }
         )
 
-        save_pathology_encoder_checkpoint(
+        save_vl_projector_checkpoint(
             save_path=last_path,
             model=model,
             optimizer=optimizer,
@@ -1132,7 +713,7 @@ def main():
         if val_stats["loss"] < best_val_loss:
             best_val_loss = val_stats["loss"]
             best_epoch = epoch + 1
-            save_pathology_encoder_checkpoint(
+            save_vl_projector_checkpoint(
                 save_path=best_path,
                 model=model,
                 optimizer=optimizer,
