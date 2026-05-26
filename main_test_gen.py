@@ -42,15 +42,32 @@ def compute_text_metrics(prediction: str, reference: str) -> Dict[str, float]:
     reference_tokens = reference.split()
     prediction_tokens = prediction.split()
 
-    bleu = sentence_bleu([reference_tokens], prediction_tokens, smoothing_function=smooth)
+    weights_list = [
+        (1.0, 0.0, 0.0, 0.0),       # BLEU-1
+        (0.5, 0.5, 0.0, 0.0),       # BLEU-2
+        (1/3, 1/3, 1/3, 0.0),       # BLEU-3
+        (0.25, 0.25, 0.25, 0.25)    # BLEU-4
+    ]
+
+    bleu1 = sentence_bleu([reference_tokens], prediction_tokens, 
+                          smoothing_function=smooth, weights=weights_list[0])
+    bleu2 = sentence_bleu([reference_tokens], prediction_tokens, 
+                          smoothing_function=smooth, weights=weights_list[1])
+    bleu3 = sentence_bleu([reference_tokens], prediction_tokens, 
+                          smoothing_function=smooth, weights=weights_list[2])
+    bleu4 = sentence_bleu([reference_tokens], prediction_tokens, 
+                          smoothing_function=smooth, weights=weights_list[3])
     meteor = meteor_score([reference_tokens], prediction_tokens)
 
     return {
-        "rouge1_fmeasure": float(rouge_scores["rouge1"].fmeasure),
-        "rouge2_fmeasure": float(rouge_scores["rouge2"].fmeasure),
-        "rougeL_fmeasure": float(rouge_scores["rougeL"].fmeasure),
-        "bleu": float(bleu),
-        "meteor": float(meteor),
+        "ROUGE-1": float(rouge_scores["rouge1"].fmeasure),
+        "ROUGE-2": float(rouge_scores["rouge2"].fmeasure),
+        "ROUGE-L": float(rouge_scores["rougeL"].fmeasure),
+        "BLEU-1": float(bleu1),
+        "BLEU-2": float(bleu2),
+        "BLEU-3": float(bleu3),
+        "BLEU-4": float(bleu4),
+        "METEOR": float(meteor),
     }
 
 
