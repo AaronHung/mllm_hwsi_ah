@@ -237,12 +237,15 @@ python main_train_LLM_stage3.py \
 
 * The model autodownloads from [huggingface](https://huggingface.co/Bastech/MLLM-HWSI) via ```--model_name Bastech/MLLM-HWSI```. However, you may download and save it locally. 
 
-### 2. Test: Report Generation
+### 2. Test:
+
+* Use the ```--test_type``` parameter to select the type pf test you want to perform. Currently, the code supports Morphology, Caption, Classification, or Report tests.
 
 ```
-python main_test_gen.py \
+python main_test.py \
   --wsi_dir <Test WSI directory> \
-  --report_json <Test report json file path> \
+  --gt_json_path <Test json file path> \
+  --test_type <Morphology, Caption, Classification, or Report> \
   --wsi_feat_dir <features save directory>/wsi \
   --region_feat_dir <features save directory>/region_4k \
   --patch_feat_dir <features save directory>/patches_filtered \
@@ -252,21 +255,6 @@ python main_test_gen.py \
   --model_name Bastech/MLLM-HWSI
 ```
 
-### 3. Test: Visual Question and Answer (VQA)
-
-```
-python main_test_vqa.py \
-  --wsi_dir <Test WSI directory> \
-  --report_json <Test report or conversation json file path> \
-  --wsi_feat_dir <features save directory>/wsi \
-  --region_feat_dir <features save directory>/region_4k \
-  --patch_feat_dir <features save directory>/patches_filtered \
-  --cell_feat_dir <features save directory>/cells \
-  --cell_pt_filename encoded_cell_features.pt \
-  --output_json <output json result path> \
-  --model_name Bastech/MLLM-HWSI
-  --use_accuracy False
-```
 * Note: Other customizations are available in the respective python files. You may tweak them to your particular applications.
 
 ## MLLM-HWSI ChatBot
@@ -274,7 +262,7 @@ python main_test_vqa.py \
 - You may chat with MLLM-HWSI model using the ChatBot. 
 
 ```
-python main_vqa_chat.py --port <port_number e.g. 8080>
+python main_chat.py --port <port_number e.g. 8080>
 ```
 
 ## Acknowledgements
