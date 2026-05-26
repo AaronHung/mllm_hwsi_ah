@@ -229,12 +229,12 @@ python main_train_LLM_stage3.py \
 
 ## Inference
 
-* Ensure that your WSI test data has been prepared as discribed in [Data preparation](#data-preparation) above.
+* Ensure that your WSI test data has been prepared as described in [Data preparation](#data-preparation) above.
 
 
 ### 1 Checkpoints Download
 
-* You may download HLLM-WSI pretrained model from [huggingface](https://huggingface.co/Bastech/MLLM-HWSI).
+* The model autodownloads from [huggingface](https://huggingface.co/Bastech/MLLM-HWSI) via ```--model_name Bastech/MLLM-HWSI```. However, you may download and save it locally. 
 
 ### 2. Test: Report Generation
 
@@ -270,7 +270,7 @@ python main_test_vqa.py \
 
 ## MLLM-HWSI ChatBot
 
-You may chat with MLLM-HWSI model using the ChatBot. 
+- You may chat with MLLM-HWSI model using the ChatBot. 
 
 ```
 python main_vqa_chat.py --port <port_number e.g. 8080>
