@@ -255,7 +255,7 @@ python main_test.py \
   --model_name Bastech/MLLM-HWSI
 ```
 
-* Note: Other customizations are available in the respective python files. You may tweak them to your particular applications.
+* Note: Other customizations are available in the respective python file. You may tweak them to your particular applications.
 
 ## MLLM-HWSI ChatBot
 
