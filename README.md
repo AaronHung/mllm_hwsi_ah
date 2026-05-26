@@ -115,7 +115,7 @@ python ext_regions.py \
 ```
 python ext_feats_conch_hierar_par.py \
   --wsi_dir <WSI directory> \
-  --reports_path <Report json file path> \
+  --reports_path <Report json file path or None for inference data> \
   --h5_dir_4096 <regions save directory>/patches \
   --hipt_repo ./HIPT_4K \
   --checkpoint256 <hipt 256 model.pth path> \

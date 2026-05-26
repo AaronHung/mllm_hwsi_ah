@@ -110,9 +110,9 @@ def semantic_patch_filtering(features, reports_path, slide_id, conch_model,
                              device, filtering_window_size, top_k=5, mode='train'):
 
     features = features.to(device)
-    question, answer = read_slide_report(Path(reports_path), slide_id)
 
     if mode == 'train':
+        question, answer = read_slide_report(Path(reports_path), slide_id)
         tokenizer = get_tokenizer()
         answer_tokens = tokenize(texts=[answer], tokenizer=tokenizer).to(device)
 
@@ -279,9 +279,9 @@ def semantic_patch_filtering2(features, reports_path, slide_id, conch_model,
                              device, n_diss_features=32, top_k=16, mode='train'):
 
     features = features.to(device)
-    question, answer = read_slide_report(Path(reports_path), slide_id)
 
     if mode == 'train':
+        question, answer = read_slide_report(Path(reports_path), slide_id)
         tokenizer = get_tokenizer()
         answer_tokens = tokenize(texts=[answer], tokenizer=tokenizer).to(device)
 

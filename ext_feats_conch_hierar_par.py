@@ -71,7 +71,7 @@ SUPPORTED_WSI_EXTS = {".svs", ".tif", ".tiff", ".ndpi", ".mrxs", ".scn", ".vms",
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Extract HIPT features from CLAM coordinate files")
     parser.add_argument("--wsi_dir", type=str, required=True)
-    parser.add_argument("--reports_path", type=str, required=False, help="Optional directory with slide-level reports for semantic filtering")
+    parser.add_argument("--reports_path", type=str, required=False, default=None, help="Optional directory with slide-level reports for semantic filtering")
     parser.add_argument("--h5_dir_4096", type=str, required=True)
     parser.add_argument("--hipt_repo", type=str, required=True, help="Path to local HIPT repo root")
     parser.add_argument("--checkpoint256", type=str, required=True)
@@ -507,7 +507,7 @@ def _process_slides_for_worker(
             
             # Perform semantic patch filtering if reports_path is provided
             selected_features: Optional[Tensor] = None
-            if args.reports_path is not None and patches_tensor is not None and patches_tensor.shape[0] > 0:
+            if patches_tensor is not None and patches_tensor.shape[0] > 0:
                 #selected_features, selected_indices = semantic_patch_filtering(
                 #                                                patches_tensor, args.reports_path, slide_id, 
                 #                                                conch_model, device, args.filtering_window_size, 
