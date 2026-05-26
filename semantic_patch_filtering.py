@@ -74,7 +74,7 @@ def compute_patch_similarity(x, window_size):
             
         return similarities, torch.cat(selected_indices)
 
-def adaptive_token_selection(features, text_features, window_size):
+def adaptive_token_selection(features, window_size, text_features=None):
         """Select tokens based on text relevance and local structure"""
         N, D = features.shape
         L_max = 64
@@ -83,11 +83,12 @@ def adaptive_token_selection(features, text_features, window_size):
         similarities, indices = compute_patch_similarity(features, window_size)
         
         # Project features to match text_features dimension if needed
-        if features.shape[-1] != text_features.shape[-1]:
+        if text_features is not None and features.shape[-1] != text_features.shape[-1]:
             projection = nn.Linear(features.shape[-1], text_features.shape[-1], device=features.device)
             features_projected = projection(features)
-        else:
+        else:   # Inference mode: no report, use original features for relevance scoring
             features_projected = features
+            text_features = features  
         
         # Text-guided importance scoring
         text_relevance = torch.matmul(features_projected, text_features.T).mean(-1)
@@ -106,23 +107,26 @@ def adaptive_token_selection(features, text_features, window_size):
         return selected_features, selected_indices
 
 def semantic_patch_filtering(features, reports_path, slide_id, conch_model, 
-                             device, filtering_window_size, top_k=5):
+                             device, filtering_window_size, top_k=5, mode='train'):
 
     features = features.to(device)
     question, answer = read_slide_report(Path(reports_path), slide_id)
 
-    tokenizer = get_tokenizer()
-    answer_tokens = tokenize(texts=[answer], tokenizer=tokenizer).to(device)
+    if mode == 'train':
+        tokenizer = get_tokenizer()
+        answer_tokens = tokenize(texts=[answer], tokenizer=tokenizer).to(device)
 
-    with torch.inference_mode():
-        text_features = conch_model.encode_text(answer_tokens)
+        with torch.inference_mode():
+            text_features = conch_model.encode_text(answer_tokens)
+    else:
+        text_features = None
     
     selected_patch_features, selected_patch_indices = [], []
 
     for i in range(features.shape[0]):
         patch_feat = features[i].squeeze() 
         selected_features, selected_indices = \
-            adaptive_token_selection(patch_feat, text_features, filtering_window_size)
+            adaptive_token_selection(patch_feat, filtering_window_size, text_features)
         selected_patch_features.append(selected_features[:top_k])
         selected_patch_indices.append(selected_indices[:top_k])
 
@@ -272,16 +276,20 @@ def select_topk_by_text_similarity(selected_features, selected_indices, text_fea
 
 
 def semantic_patch_filtering2(features, reports_path, slide_id, conch_model, 
-                             device, n_diss_features=32, top_k=16):
+                             device, n_diss_features=32, top_k=16, mode='train'):
 
     features = features.to(device)
     question, answer = read_slide_report(Path(reports_path), slide_id)
 
-    tokenizer = get_tokenizer()
-    answer_tokens = tokenize(texts=[answer], tokenizer=tokenizer).to(device)
+    if mode == 'train':
+        tokenizer = get_tokenizer()
+        answer_tokens = tokenize(texts=[answer], tokenizer=tokenizer).to(device)
 
-    with torch.inference_mode():
-        text_features = conch_model.encode_text(answer_tokens)
+        with torch.inference_mode():
+            text_features = conch_model.encode_text(answer_tokens)
+    else:
+        text_features = None
+    
     
     selected_patch_features, selected_patch_indices = [], []
 
@@ -292,11 +300,13 @@ def semantic_patch_filtering2(features, reports_path, slide_id, conch_model,
         dissimilarity_results = select_dissimilar_features(patch_feat, n_diss_features, return_full_similarity=True)
         selected_dissimilar_indices = dissimilarity_results["selected_indices"]
         selected_dissimilar_features = patch_feat[selected_dissimilar_indices]
+
+        text_features = selected_dissimilar_features[0].unsqueeze(0) if text_features is None else text_features
         
         # Compute report similarity
         report_similarity_results = select_topk_by_text_similarity(selected_dissimilar_features, 
-                                                                   selected_dissimilar_indices, text_features, top_k)
-        
+                                                                    selected_dissimilar_indices, text_features, top_k)
+
         selected_patch_features.append(report_similarity_results["topk_features"])
         selected_patch_indices.append(report_similarity_results["topk_original_indices"])
 

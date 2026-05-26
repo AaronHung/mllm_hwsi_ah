@@ -122,6 +122,7 @@ python ext_feats_conch_hierar_par.py \
   --checkpoint4k <hipt 4096 model.pth path> \
   --trident_repo ./trident \
   --conch_ckpt_path <conch.bin model path> \
+  --data_mode <train or inference> \
   --out_dir <features save directory> \
   --extract_patch_features \
   --all_gpus \

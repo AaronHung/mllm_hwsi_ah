@@ -81,6 +81,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--conch_model_cfg", type=str, default="conch_ViT-B-16", help="CONCH model configuration")
     parser.add_argument("--encoder_name", type=str, default="conch_v15", choices=["conch_v1", "conch_v15"], help="TRIDENT encoder name")
     parser.add_argument("--conch_batch_size", type=int, default=128, help="Batch size for forward pass")
+    parser.add_argument("--data_mode", type=str, default="train", choices=["train", "inference"], help="Data mode for feature extraction")
     parser.add_argument("--out_dir", type=str, required=True)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--batch_size_256", type=int, default=256)
@@ -515,7 +516,7 @@ def _process_slides_for_worker(
                 selected_features, selected_indices = semantic_patch_filtering2(
                                                                 patches_tensor, args.reports_path, slide_id, 
                                                                 conch_model, device, args.n_diss_features, 
-                                                                args.top_k)
+                                                                args.top_k, mode=args.data_mode)
                 
                 save_tensor(filtered_patches_path, {"selected_features": selected_features, 
                                                     "selected_indices": selected_indices})
