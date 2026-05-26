@@ -239,7 +239,7 @@ python main_train_LLM_stage3.py \
 
 ### 2. Test:
 
-* Use the ```--test_type``` parameter to select the type of test you want to perform. Currently, the code supports Morphology, Caption, Classification, or Report tests.
+* Use the ```--test_type``` parameter to select the type of test you want to perform.
 
 ```
 python main_test.py \
