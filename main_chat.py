@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-VQA Chatbot — Gradio front-end backed by the MLLMHWSIQWEN model.
+VQA Chatbot — Gradio front-end backed by the MLLMHWSI model.
 
 Users select:
   • A single WSI file  (used to derive the slide_id)
   • A base features directory  (must contain wsi/, region/, patch/, cells/ sub-dirs)
-  • A checkpoint for the MLLM-HWSI V-L encoder
+    • A model folder/repo for MLLM-HWSI (includes VL projector artifacts)
 
 If the expected .pt feature files for the chosen slide are absent the app
 launches feature extraction in a background thread, streams live log output
@@ -24,12 +24,14 @@ import queue
 import shlex
 import threading
 import subprocess
+import tempfile
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import torch
 import gradio as gr
 import base64
+from main_utils import normalize_model_source as _normalize_model_source
 
 # ---------------------------------------------------------------------------
 # Lazy model container — loaded once per session
@@ -63,6 +65,13 @@ FEAT_SUBDIRS = {
 }
 CELL_PT_FILENAME = "encoded_cell_features.pt"
 WSI_EXTENSIONS = {".svs", ".tif", ".tiff", ".ndpi", ".mrxs", ".scn", ".vms", ".vmu", ".bif"}
+DEFAULT_JSON_PATH = "/TCGA/WSI-Bench-train-Report-only.jsonl"
+DEFAULT_MAG_LEVEL = "mag20x"
+DEFAULT_MAG_NUM = 20
+DEFAULT_HIPT_256_CKPT = "../HIPT_ckpts/vit_256_small_dino.pth"
+DEFAULT_HIPT_4096_CKPT = "../HIPT_ckpts/vit_4096_xs_dino.pth"
+DEFAULT_CONCH_CKPT = "../CONCH_ckpt/pytorch_model.bin"
+DEFAULT_CELLVIT_CKPT = "../CELLVITpp_ckpts/CellViT-256-x40-AMP.pth"
 
 
 def _slide_id_from_path(wsi_path: str) -> str:
@@ -138,7 +147,7 @@ def _feat_dirs(base_dir: str):
     }
 
 
-def _features_exist(slide_id: str, base_dir: str) -> Tuple[bool, str]:
+def _features_exist(slide_id: str, base_dir: str) -> Tuple[bool, List[str]]:
     """Return (all_present, missing_description)."""
     dirs = _feat_dirs(base_dir)
     checks = [
@@ -149,6 +158,13 @@ def _features_exist(slide_id: str, base_dir: str) -> Tuple[bool, str]:
     ]
     missing = [str(p) for p in checks if not p.exists()]
     return (len(missing) == 0), missing
+
+
+def _resolve_ckpt_path(path_str: str) -> Path:
+    path = Path(path_str).expanduser()
+    if path.is_absolute():
+        return path
+    return (Path(__file__).parent / path).resolve()
 
 
 def _available_device_choices() -> Tuple[list, str]:
@@ -184,8 +200,8 @@ def _load_model(
     num_slide_tokens: int,
     projector_type: str,
 ):
-    """Load and return a ready-to-use MLLMHWSIQWEN model."""
-    from mllm_hwsi import VLProjectorConfig, MLLMHWSIQWEN
+    """Load and return a ready-to-use MLLMHWSI model."""
+    from mllm_hwsi import VLProjectorConfig, MLLMHWSI
 
     cfg = VLProjectorConfig(
         llm_dim=llm_dim,
@@ -195,18 +211,23 @@ def _load_model(
         num_query_tokens=num_slide_tokens,
         projector_type=projector_type,
     )
+    model_source = _normalize_model_source(model_name)
     dtype = torch.float16 if device.startswith("cuda") else torch.float32
-    model = MLLMHWSIQWEN(
-        model_name=model_name,
+    model = MLLMHWSI.from_pretrained(
+        source=model_source,
         projector_cfg=cfg,
         device=device,
-        torch_dtype=dtype,
+        dtype=dtype,
+        load_projector=True,
     )
 
     if encoder_ckpt:
         ckpt = torch.load(encoder_ckpt, map_location="cpu")
-        ckpt = ckpt.get("state_dict", ckpt)
-        model.pathology_encoder.load_state_dict(ckpt, strict=False)
+        if isinstance(ckpt, dict) and "vl_projector_state_dict" in ckpt:
+            ckpt = ckpt["vl_projector_state_dict"]
+        else:
+            ckpt = ckpt.get("state_dict", ckpt)
+        model.vl_projector.load_state_dict(ckpt, strict=False)
 
     model.eval()
     return model
@@ -226,52 +247,157 @@ def _load_features(slide_id: str, base_dir: str) -> Tuple:
 # Feature extraction in a background thread (streams stdout to a queue)
 # ---------------------------------------------------------------------------
 
-def _run_extraction_pipeline(wsi_path: str, base_dir: str, log_queue: queue.Queue):
-    """
-    Runs run_ext_pipeline.sh for a single WSI.
-    Streams lines into log_queue. Puts None when done.
-
-    NOTE: The extraction script is designed to process a whole directory.
-    We pass the parent of the WSI as --wsi_dir so only that one slide is
-    processed (the script skips slides that already have outputs).
-    """
-    wsi_file = Path(wsi_path)
-    script = Path(__file__).parent / "run_ext_pipeline.sh"
-
-    if not script.exists():
-        log_queue.put(f"[ERROR] Extraction script not found: {script}\n")
-        log_queue.put(None)
-        return
-
-    env = os.environ.copy()
-    cmd = [
-        "bash", str(script),
-        "--wsi_dir",   str(wsi_file.parent),
-        "--out_dir",   str(base_dir),
-        "--single_slide", wsi_file.stem,   # script must support this flag, else omit
-    ]
-
+def _run_cmd_and_stream(cmd: List[str], log_queue: queue.Queue, cwd: Optional[Path] = None) -> int:
     log_queue.put(f"[EXTRACTION] Running: {' '.join(shlex.quote(c) for c in cmd)}\n")
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=str(cwd) if cwd is not None else None,
+    )
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        log_queue.put(line)
+    proc.wait()
+    return int(proc.returncode)
+
+
+def _run_extraction_pipeline(
+    wsi_path: str,
+    base_dir: str,
+    reports_path: str,
+    hipt_4096_ckpt: str,
+    hipt_256_ckpt: str,
+    conch_ckpt: str,
+    cellvit_ckpt: str,
+    log_queue: queue.Queue,
+):
+    """Run extraction for a single slide using defaults from run_ext_pipeline.sh."""
+    wsi_file = Path(wsi_path).expanduser().resolve()
+    slide_id = wsi_file.stem
+    project_root = Path(__file__).parent.resolve()
+    base_features = Path(base_dir).expanduser().resolve()
+    regions_dir = base_features.parent / f"regions_{DEFAULT_MAG_LEVEL}"
+
+    reports = Path(reports_path).expanduser().resolve()
+    hipt_256_path = _resolve_ckpt_path(hipt_256_ckpt)
+    hipt_4096_path = _resolve_ckpt_path(hipt_4096_ckpt)
+    conch_path = _resolve_ckpt_path(conch_ckpt)
+    cellvit_path = _resolve_ckpt_path(cellvit_ckpt)
 
     try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            env=env,
-        )
-        for line in proc.stdout:
-            log_queue.put(line)
-        proc.wait()
-        if proc.returncode == 0:
+        if not reports.exists():
+            log_queue.put(f"[EXTRACTION] ✗ reports_path not found: {reports}\n")
+            return
+
+        for label, ckpt in [
+            ("HIPT 4096", hipt_4096_path),
+            ("HIPT 256", hipt_256_path),
+            ("CONCH", conch_path),
+            ("CellViT", cellvit_path),
+        ]:
+            if not ckpt.is_file():
+                log_queue.put(f"[EXTRACTION] ✗ {label} checkpoint not found: {ckpt}\n")
+                return
+
+        with tempfile.TemporaryDirectory(prefix="vqa_extract_") as tmp_root:
+            tmp_root_p = Path(tmp_root)
+            tmp_wsi_dir = tmp_root_p / "wsi"
+            tmp_wsi_dir.mkdir(parents=True, exist_ok=True)
+            (tmp_wsi_dir / wsi_file.name).symlink_to(wsi_file)
+
+            regions_dir.mkdir(parents=True, exist_ok=True)
+            base_features.mkdir(parents=True, exist_ok=True)
+
+            step1 = [
+                sys.executable,
+                str(project_root / "ext_regions.py"),
+                "--source", str(tmp_wsi_dir),
+                "--save_dir", str(regions_dir),
+                "--mag_level", str(DEFAULT_MAG_NUM),
+                "--patch_size", "4096",
+                "--step_size", "4096",
+                "--seg",
+                "--patch",
+                "--stitch",
+            ]
+            rc = _run_cmd_and_stream(step1, log_queue, cwd=project_root)
+            if rc != 0:
+                log_queue.put(f"[EXTRACTION] ✗ ext_regions.py failed with code {rc}.\n")
+                return
+
+            step2 = [
+                sys.executable,
+                str(project_root / "ext_feats_conch_hierar_par.py"),
+                "--wsi_dir", str(tmp_wsi_dir),
+                "--reports_path", str(reports),
+                "--h5_dir_4096", str(regions_dir / "patches"),
+                "--hipt_repo", str(project_root / "HIPT_4K"),
+                "--checkpoint256", str(hipt_256_path),
+                "--checkpoint4k", str(hipt_4096_path),
+                "--trident_repo", str(project_root / "trident"),
+                "--conch_ckpt_path", str(conch_path),
+                "--conch_batch_size", "128",
+                "--encoder_name", "conch_v1",
+                "--conch_model_cfg", "conch_ViT-B-16",
+                "--out_dir", str(base_features),
+                "--patch_size", "256",
+                "--extract_patch_features",
+                "--n_diss_features", "32",
+                "--top_k", "16",
+                "--process_single_slide", slide_id,
+                "--all_gpus",
+                "--workers_per_gpu", "1",
+            ]
+            rc = _run_cmd_and_stream(step2, log_queue, cwd=project_root)
+            if rc != 0:
+                log_queue.put(f"[EXTRACTION] ✗ ext_feats_conch_hierar_par.py failed with code {rc}.\n")
+                return
+
+            coords_path = base_features / "coords_region4096_valid" / f"{slide_id}.h5"
+            selected_path = base_features / "patches_filtered" / f"{slide_id}.pt"
+            if not coords_path.exists() or not selected_path.exists():
+                log_queue.put(
+                    "[EXTRACTION] ✗ Missing intermediate files for cell extraction: "
+                    f"{coords_path} and/or {selected_path}.\n"
+                )
+                return
+
+            tmp_region_coords = tmp_root_p / "coords_region4096_valid"
+            tmp_selected = tmp_root_p / "patches_filtered"
+            tmp_region_coords.mkdir(parents=True, exist_ok=True)
+            tmp_selected.mkdir(parents=True, exist_ok=True)
+            (tmp_region_coords / coords_path.name).symlink_to(coords_path)
+            (tmp_selected / selected_path.name).symlink_to(selected_path)
+
+            step3 = [
+                sys.executable,
+                str(project_root / "ext_cell_feat_par.py"),
+                "--wsi_dir", str(tmp_wsi_dir),
+                "--region_coords_dir", str(tmp_region_coords),
+                "--selected_indices_dir", str(tmp_selected),
+                "--checkpoint", str(cellvit_path),
+                "--output_dir", str(base_features / "cells"),
+                "--batch_size", "16",
+                "--magnification", "40",
+                "--all_gpus",
+                "--workers_per_gpu", "1",
+                "--feature_mode", "mask_mean",
+                "--enforce_amp",
+                "--save_full_outputs_regions_per_wsi", "10",
+                "--full_output_region_selection", "random",
+            ]
+            rc = _run_cmd_and_stream(step3, log_queue, cwd=project_root)
+            if rc != 0:
+                log_queue.put(f"[EXTRACTION] ✗ ext_cell_feat_par.py failed with code {rc}.\n")
+                return
+
             log_queue.put("[EXTRACTION] ✓ Feature extraction completed successfully.\n")
-        else:
-            log_queue.put(f"[EXTRACTION] ✗ Extraction exited with code {proc.returncode}.\n")
     except Exception as exc:
         log_queue.put(f"[EXTRACTION] ✗ Exception: {exc}\n")
     finally:
-        log_queue.put(None)   # sentinel
+        log_queue.put(None)
 
 
 # ---------------------------------------------------------------------------
@@ -339,6 +465,7 @@ def build_app() -> gr.Blocks:
     state_keys = [
         "model", "slide_id", "features", "base_dir", "device",
         "extracting", "extract_thread", "log_queue",
+        "extract_confirmed", "confirm_target",
         "max_new_tokens", "temperature", "top_p", "do_sample",
         "num_beams", "repetition_penalty", "length_penalty",
         "no_repeat_ngram_size",
@@ -379,17 +506,64 @@ def build_app() -> gr.Blocks:
 
             gr.Markdown("Base features directory must contain: wsi/, region_4k/, patches_filtered/, cells/")
 
+            with gr.Group(visible=False) as extract_confirm_group:
+                extract_prompt_md = gr.Markdown("")
+                with gr.Row():
+                    extract_yes_btn = gr.Button("Yes, extract features", variant="primary")
+                    extract_no_btn = gr.Button("No", variant="secondary")
+
+            with gr.Column(visible=False) as extraction_inputs_col:
+                with gr.Row():
+                    reports_path_box = gr.Textbox(
+                        label="Reports JSON/JSONL Path",
+                        value=DEFAULT_JSON_PATH,
+                        scale=8,
+                    )
+                    browse_reports_btn = gr.Button("Browse File", scale=2)
+
+                with gr.Row():
+                    hipt_4096_ckpt_box = gr.Textbox(
+                        label="HIPT 4096 Checkpoint",
+                        value=DEFAULT_HIPT_4096_CKPT,
+                        scale=8,
+                    )
+                    browse_hipt_4096_btn = gr.Button("Browse File", scale=2)
+
+                with gr.Row():
+                    hipt_256_ckpt_box = gr.Textbox(
+                        label="HIPT 256 Checkpoint",
+                        value=DEFAULT_HIPT_256_CKPT,
+                        scale=8,
+                    )
+                    browse_hipt_256_btn = gr.Button("Browse File", scale=2)
+
+                with gr.Row():
+                    conch_ckpt_box = gr.Textbox(
+                        label="CONCH Checkpoint",
+                        value=DEFAULT_CONCH_CKPT,
+                        scale=8,
+                    )
+                    browse_conch_btn = gr.Button("Browse File", scale=2)
+
+                with gr.Row():
+                    cellvit_ckpt_box = gr.Textbox(
+                        label="CellViT Checkpoint",
+                        value=DEFAULT_CELLVIT_CKPT,
+                        scale=8,
+                    )
+                    browse_cellvit_btn = gr.Button("Browse File", scale=2)
+
             with gr.Row():
                 encoder_ckpt_box = gr.Textbox(
-                    label="MLLM-HWSI V-L Encoder Checkpoint",
-                    placeholder="/path/to/encoder_checkpoint.pt",
+                    label="VL Projector Checkpoint Override (Optional)",
+                    placeholder="Optional: /path/to/VL_projector_checkpoint.pt",
                     scale=8,
                 )
                 browse_encoder_btn = gr.Button("Browse File", scale=2)
 
             with gr.Row():
                 model_name_box = gr.Textbox(
-                    label="MLLM-HWSI model folder",
+                    label="MLLM-HWSI model folder/ Huggingface repo",
                     placeholder="Qwen/Qwen2.5-7B-Instruct or /path/to/model_dir",
                     scale=8,
                 )
@@ -407,6 +581,12 @@ def build_app() -> gr.Blocks:
             with gr.Row():
                 load_btn = gr.Button("Load Model & Slide", variant="primary")
                 reload_btn = gr.Button("Reload", variant="secondary")
+            with gr.Column(visible=False) as readiness_col:
+                readiness_box = gr.Markdown(
+                    value=(
+                        "<span style='color:#b91c1c; font-weight:600'>Extraction readiness: Not ready</span>"
+                    )
+                )
             status_box = gr.Textbox(label="Status", interactive=False, lines=2)
 
         # ---- Extraction log ----
@@ -438,30 +618,69 @@ def build_app() -> gr.Blocks:
         def on_load(
             wsi_path, base_dir, enc_ckpt,
             mdl_name, dev,
+            reports_path,
+            hipt_4096_ckpt,
+            hipt_256_ckpt,
+            conch_ckpt,
+            cellvit_ckpt,
             state,
             force_reload: bool = False,
         ):
-            """Validate inputs, check features, kick off extraction or load model."""
+            """Validate inputs, check features, prompt/launch extraction, or load model."""
 
             wsi_path = _normalize_selector_path(wsi_path)
             base_dir = _normalize_selector_path(base_dir)
             enc_ckpt = _normalize_selector_path(enc_ckpt)
             mdl_name = _normalize_selector_path(mdl_name)
+            reports_path = _normalize_selector_path(reports_path)
+            hipt_4096_ckpt = _normalize_selector_path(hipt_4096_ckpt)
+            hipt_256_ckpt = _normalize_selector_path(hipt_256_ckpt)
+            conch_ckpt = _normalize_selector_path(conch_ckpt)
+            cellvit_ckpt = _normalize_selector_path(cellvit_ckpt)
+
+            def _ret(
+                state_out,
+                status_text,
+                log_text="",
+                prompt_text="",
+                show_prompt=False,
+                show_extract_inputs=False,
+            ):
+                return (
+                    state_out,
+                    status_text,
+                    log_text,
+                    gr.update(value=prompt_text),
+                    gr.update(visible=show_prompt),
+                    gr.update(visible=show_extract_inputs),
+                    gr.update(visible=show_extract_inputs),
+                )
 
             if not wsi_path:
-                return state, "⚠️ Please select a WSI file.", ""
+                return _ret(state, "⚠️ Please select a WSI file.")
 
             if Path(wsi_path).suffix.lower() not in WSI_EXTENSIONS:
-                return state, f"⚠️ Selected WSI path is not a supported slide file: '{wsi_path}'", ""
+                return _ret(state, f"⚠️ Selected WSI path is not a supported slide file: '{wsi_path}'")
 
             if not base_dir or not Path(base_dir).is_dir():
-                return state, (
+                return _ret(state, (
                     f"⚠️ Base features directory does not exist: '{base_dir}'. "
                     "Please create it or choose an existing one."
-                ), ""
+                ))
 
             slide_id = _slide_id_from_path(wsi_path)
             ok, missing = _features_exist(slide_id, base_dir)
+            confirm_target = f"{slide_id}|{Path(base_dir).resolve()}"
+            was_confirmed = bool(state.get("extract_confirmed")) and state.get("confirm_target") == confirm_target
+
+            # Guard: if extraction is already running, don't reset state or double-start
+            _active_thread = state.get("extract_thread")
+            if _active_thread is not None and _active_thread.is_alive():
+                return _ret(
+                    state,
+                    "⏳ Feature extraction is still running. "
+                    "Check the Extraction Log panel and try again when it finishes.",
+                )
 
             new_state = dict(state)
             new_state.update({
@@ -481,14 +700,70 @@ def build_app() -> gr.Blocks:
                 "repetition_penalty": 1.15,
                 "length_penalty": 1.0,
                 "no_repeat_ngram_size": 3,
+                "confirm_target": confirm_target,
+                "extract_confirmed": was_confirmed,
             })
 
             if not ok:
+                missing_feature_lines = "\n".join(f"  - {m}" for m in missing)
+
+                if not was_confirmed:
+                    prompt = (
+                        f"⚠️ Selected slide features for '{slide_id}' do not exist in the selected folder.\n\n"
+                        f"Missing files:\n{missing_feature_lines}\n\n"
+                        "Do you want to extract features?"
+                    )
+                    new_state["extract_confirmed"] = False
+                    return _ret(
+                        new_state,
+                        "⚠️ Slide features are missing. Please choose Yes/No below.",
+                        prompt_text=prompt,
+                        show_prompt=True,
+                        show_extract_inputs=False,
+                    )
+
+                missing_ckpt_lines = []
+
+                reports_resolved = Path(reports_path).expanduser() if reports_path else None
+                if reports_resolved is None or not reports_resolved.exists():
+                    missing_ckpt_lines.append(
+                        f"reports_path: {reports_resolved if reports_resolved is not None else '(empty)'}"
+                    )
+
+                for label, raw_path in [
+                    ("HIPT 4096", hipt_4096_ckpt),
+                    ("HIPT 256", hipt_256_ckpt),
+                    ("CONCH", conch_ckpt),
+                    ("CellViT", cellvit_ckpt),
+                ]:
+                    resolved = _resolve_ckpt_path(raw_path) if raw_path else None
+                    if resolved is None or not resolved.is_file():
+                        missing_ckpt_lines.append(
+                            f"{label}: {resolved if resolved is not None else '(empty)'}"
+                        )
+
+                if missing_ckpt_lines:
+                    missing_ckpt_text = "\n".join(f"  - {m}" for m in missing_ckpt_lines)
+                    return _ret(new_state, (
+                        f"⚠️ Features are missing for slide '{slide_id}':\n{missing_feature_lines}\n\n"
+                        "Please provide valid checkpoint/report paths:\n"
+                        f"{missing_ckpt_text}"
+                    ), show_extract_inputs=True)
+
                 # Kick off extraction in background
                 log_q = queue.Queue()
                 t = threading.Thread(
                     target=_run_extraction_pipeline,
-                    args=(wsi_path, base_dir, log_q),
+                    args=(
+                        wsi_path,
+                        base_dir,
+                        reports_path,
+                        hipt_4096_ckpt,
+                        hipt_256_ckpt,
+                        conch_ckpt,
+                        cellvit_ckpt,
+                        log_q,
+                    ),
                     daemon=True,
                 )
                 t.start()
@@ -497,13 +772,16 @@ def build_app() -> gr.Blocks:
                 new_state["log_queue"] = log_q
                 status_msg = (
                     f"⏳ Feature files not found for slide '{slide_id}'.\n"
+                    f"Missing files:\n{missing_feature_lines}\n"
                     "Extraction is running in the background — check the "
                     "Extraction Log panel for progress. "
                     "Click 'Load Model & Slide' again once extraction finishes."
                 )
-                return new_state, status_msg, ""
+                return _ret(new_state, status_msg, show_extract_inputs=True)
 
             # Features are present → load model
+            new_state["extract_confirmed"] = False
+            new_state["confirm_target"] = None
             if force_reload:
                 status_lines = [f"🔄 Reload requested for '{slide_id}'. Loading model…"]
             else:
@@ -525,14 +803,14 @@ def build_app() -> gr.Blocks:
                 )
                 features = _load_features(slide_id, base_dir)
             except Exception as exc:
-                return new_state, f"❌ Failed to load model/features:\n{exc}", ""
+                return _ret(new_state, f"❌ Failed to load model/features:\n{exc}")
 
             new_state["model"]    = model
             new_state["features"] = features
             status_lines.append(
                 f"✅ Model loaded. Slide '{slide_id}' is ready. Ask your question below."
             )
-            return new_state, "\n".join(status_lines), ""
+            return _ret(new_state, "\n".join(status_lines), show_extract_inputs=False)
 
         def on_refresh_log(state):
             """Drain the extraction log queue and append to the log box."""
@@ -624,9 +902,29 @@ def build_app() -> gr.Blocks:
         def on_browse_encoder(current_path):
             return _pick_file_dialog(
                 current_path=current_path,
-                title="Select Pathology Encoders Checkpoint",
+                title="Select VL Projector Checkpoint",
                 filetypes=[
                     ("PyTorch checkpoints", "*.pt *.pth *.bin"),
+                    ("All files", "*.*"),
+                ],
+            )
+
+        def on_browse_reports(current_path):
+            return _pick_file_dialog(
+                current_path=current_path,
+                title="Select reports JSON/JSONL",
+                filetypes=[
+                    ("JSON/JSONL", "*.json *.jsonl"),
+                    ("All files", "*.*"),
+                ],
+            )
+
+        def on_browse_checkpoint(current_path):
+            return _pick_file_dialog(
+                current_path=current_path,
+                title="Select checkpoint file",
+                filetypes=[
+                    ("Model checkpoints", "*.pt *.pth *.bin"),
                     ("All files", "*.*"),
                 ],
             )
@@ -634,15 +932,250 @@ def build_app() -> gr.Blocks:
         def on_browse_model(current_path):
             return _pick_folder_dialog(current_path=current_path, title="Select MLLM-HWSI Model Directory")
 
-        def on_reload_click(wsi_path, base_dir, enc_ckpt, mdl_name, dev, state):
+        def on_check_features(wsi_path, base_dir, state):
+            """Immediately check feature existence when wsi or base dir change."""
+            wsi_path = _normalize_selector_path(wsi_path)
+            base_dir = _normalize_selector_path(base_dir)
+
+            # Not enough info — leave UI untouched
+            if (not wsi_path or not base_dir
+                    or Path(wsi_path).suffix.lower() not in WSI_EXTENSIONS
+                    or not Path(base_dir).is_dir()):
+                return state, gr.update(), gr.update(value=""), gr.update(visible=False)
+
+            slide_id = _slide_id_from_path(wsi_path)
+            ok, missing = _features_exist(slide_id, base_dir)
+            confirm_target = f"{slide_id}|{Path(base_dir).resolve()}"
+
+            new_state = dict(state) if state else {}
+            new_state["slide_id"] = slide_id
+            new_state["base_dir"] = base_dir
+
+            if ok:
+                # Features present — hide any stale confirm dialog
+                new_state["extract_confirmed"] = False
+                new_state["confirm_target"] = None
+                return (
+                    new_state,
+                    f"✅ Features found for slide '{slide_id}'.",
+                    gr.update(value=""),
+                    gr.update(visible=False),
+                )
+
+            # Already confirmed for this exact slide+dir — don't re-prompt
+            was_confirmed = (
+                bool(state.get("extract_confirmed"))
+                and state.get("confirm_target") == confirm_target
+            ) if state else False
+
+            if was_confirmed:
+                return state, gr.update(), gr.update(), gr.update()
+
+            missing_lines = "\n".join(f"  - {m}" for m in missing)
+            prompt = (
+                f"⚠️ Features for slide **'{slide_id}'** do not exist in the selected directory.\n\n"
+                f"Missing files:\n{missing_lines}\n\n"
+                "Do you want to extract features into that directory?"
+            )
+            new_state["confirm_target"] = confirm_target
+            new_state["extract_confirmed"] = False
+            return (
+                new_state,
+                "⚠️ Slide features are missing. Please choose Yes/No below.",
+                gr.update(value=prompt),
+                gr.update(visible=True),
+            )
+
+        def on_readiness_change(
+            wsi_path,
+            base_dir,
+            reports_path,
+            hipt_4096_ckpt,
+            hipt_256_ckpt,
+            conch_ckpt,
+            cellvit_ckpt,
+        ):
+            wsi_path = _normalize_selector_path(wsi_path)
+            base_dir = _normalize_selector_path(base_dir)
+            reports_path = _normalize_selector_path(reports_path)
+            hipt_4096_ckpt = _normalize_selector_path(hipt_4096_ckpt)
+            hipt_256_ckpt = _normalize_selector_path(hipt_256_ckpt)
+            conch_ckpt = _normalize_selector_path(conch_ckpt)
+            cellvit_ckpt = _normalize_selector_path(cellvit_ckpt)
+
+            checks = []
+
+            wsi_ok = bool(wsi_path) and Path(wsi_path).is_file() and Path(wsi_path).suffix.lower() in WSI_EXTENSIONS
+            checks.append(("WSI", wsi_ok))
+
+            base_ok = bool(base_dir) and Path(base_dir).is_dir()
+            checks.append(("Features dir", base_ok))
+
+            reports_ok = bool(reports_path) and Path(reports_path).expanduser().exists()
+            checks.append(("Reports", reports_ok))
+
+            h4096_ok = bool(hipt_4096_ckpt) and _resolve_ckpt_path(hipt_4096_ckpt).is_file()
+            h256_ok = bool(hipt_256_ckpt) and _resolve_ckpt_path(hipt_256_ckpt).is_file()
+            conch_ok = bool(conch_ckpt) and _resolve_ckpt_path(conch_ckpt).is_file()
+            cellvit_ok = bool(cellvit_ckpt) and _resolve_ckpt_path(cellvit_ckpt).is_file()
+            checks.extend([
+                ("HIPT-4096", h4096_ok),
+                ("HIPT-256", h256_ok),
+                ("CONCH", conch_ok),
+                ("CellViT", cellvit_ok),
+            ])
+
+            all_ok = all(ok for _, ok in checks)
+            parts = [f"{name}: {'OK' if ok else 'Missing'}" for name, ok in checks]
+
+            if all_ok:
+                return (
+                    "<span style='color:#15803d; font-weight:600'>"
+                    "Extraction readiness: Ready"
+                    "</span>"
+                    f"<br><span>{' | '.join(parts)}</span>"
+                )
+
+            return (
+                "<span style='color:#b91c1c; font-weight:600'>"
+                "Extraction readiness: Not ready"
+                "</span>"
+                f"<br><span>{' | '.join(parts)}</span>"
+            )
+
+        def on_reload_click(
+            wsi_path,
+            base_dir,
+            enc_ckpt,
+            mdl_name,
+            dev,
+            reports_path,
+            hipt_4096_ckpt,
+            hipt_256_ckpt,
+            conch_ckpt,
+            cellvit_ckpt,
+            state,
+        ):
             return on_load(
                 wsi_path=wsi_path,
                 base_dir=base_dir,
                 enc_ckpt=enc_ckpt,
                 mdl_name=mdl_name,
                 dev=dev,
+                reports_path=reports_path,
+                hipt_4096_ckpt=hipt_4096_ckpt,
+                hipt_256_ckpt=hipt_256_ckpt,
+                conch_ckpt=conch_ckpt,
+                cellvit_ckpt=cellvit_ckpt,
                 state=state,
                 force_reload=True,
+            )
+
+        def on_extract_confirm_yes(
+            wsi_path, base_dir,
+            reports_path, hipt_4096_ckpt, hipt_256_ckpt, conch_ckpt, cellvit_ckpt,
+            state,
+        ):
+            wsi_path = _normalize_selector_path(wsi_path)
+            base_dir = _normalize_selector_path(base_dir)
+            reports_path = _normalize_selector_path(reports_path)
+            hipt_4096_ckpt = _normalize_selector_path(hipt_4096_ckpt)
+            hipt_256_ckpt = _normalize_selector_path(hipt_256_ckpt)
+            conch_ckpt = _normalize_selector_path(conch_ckpt)
+            cellvit_ckpt = _normalize_selector_path(cellvit_ckpt)
+
+            new_state = dict(state)
+            new_state["extract_confirmed"] = True
+
+            slide_id = state.get("slide_id") or (
+                _slide_id_from_path(wsi_path) if wsi_path else None
+            )
+
+            # Validate all checkpoints before committing
+            missing_ckpt_lines = []
+            reports_resolved = Path(reports_path).expanduser() if reports_path else None
+            if reports_resolved is None or not reports_resolved.exists():
+                missing_ckpt_lines.append(
+                    f"reports_path: {reports_resolved if reports_resolved is not None else '(empty)'}"
+                )
+            for label, raw_path in [
+                ("HIPT 4096", hipt_4096_ckpt),
+                ("HIPT 256", hipt_256_ckpt),
+                ("CONCH", conch_ckpt),
+                ("CellViT", cellvit_ckpt),
+            ]:
+                resolved = _resolve_ckpt_path(raw_path) if raw_path else None
+                if resolved is None or not resolved.is_file():
+                    missing_ckpt_lines.append(
+                        f"{label}: {resolved if resolved is not None else '(empty)'}"
+                    )
+
+            if missing_ckpt_lines:
+                missing_text = "\n".join(f"  - {m}" for m in missing_ckpt_lines)
+                return (
+                    new_state,
+                    f"⚠️ Cannot start extraction — provide valid paths:\n{missing_text}",
+                    gr.update(visible=False),
+                    gr.update(visible=True),
+                    gr.update(visible=True),
+                )
+
+            # All checkpoints present — check again in case features appeared
+            ok, missing = (
+                _features_exist(slide_id, base_dir)
+                if (slide_id and base_dir)
+                else (False, [])
+            )
+            if ok:
+                return (
+                    new_state,
+                    f"✅ Features already present for '{slide_id}'. Click 'Load Model & Slide'.",
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                )
+
+            # Launch extraction in background thread
+            log_q = queue.Queue()
+            t = threading.Thread(
+                target=_run_extraction_pipeline,
+                args=(
+                    wsi_path, base_dir,
+                    reports_path, hipt_4096_ckpt, hipt_256_ckpt, conch_ckpt, cellvit_ckpt,
+                    log_q,
+                ),
+                daemon=True,
+            )
+            t.start()
+            new_state["extracting"] = True
+            new_state["extract_thread"] = t
+            new_state["log_queue"] = log_q
+
+            missing_lines = "\n".join(f"  - {m}" for m in missing)
+            status = (
+                f"⏳ Extraction started for slide '{slide_id}'.\n"
+                f"Missing files:\n{missing_lines}\n"
+                "Check the Extraction Log panel for progress (↻ Refresh Log). "
+                "Click 'Load Model & Slide' once extraction finishes."
+            )
+            return (
+                new_state,
+                status,
+                gr.update(visible=False),
+                gr.update(visible=True),
+                gr.update(visible=True),
+            )
+
+        def on_extract_confirm_no(state):
+            new_state = dict(state)
+            new_state["extract_confirmed"] = False
+            new_state["confirm_target"] = None
+            return (
+                new_state,
+                "Extraction cancelled. Select another slide/folder or click Load again when ready.",
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
             )
 
         # ---- Wire up ----
@@ -654,15 +1187,66 @@ def build_app() -> gr.Blocks:
         )
         browse_encoder_btn.click(fn=on_browse_encoder, inputs=[encoder_ckpt_box], outputs=[encoder_ckpt_box])
         browse_model_btn.click(fn=on_browse_model, inputs=[model_name_box], outputs=[model_name_box])
+        browse_reports_btn.click(fn=on_browse_reports, inputs=[reports_path_box], outputs=[reports_path_box])
+        browse_hipt_4096_btn.click(fn=on_browse_checkpoint, inputs=[hipt_4096_ckpt_box], outputs=[hipt_4096_ckpt_box])
+        browse_hipt_256_btn.click(fn=on_browse_checkpoint, inputs=[hipt_256_ckpt_box], outputs=[hipt_256_ckpt_box])
+        browse_conch_btn.click(fn=on_browse_checkpoint, inputs=[conch_ckpt_box], outputs=[conch_ckpt_box])
+        browse_cellvit_btn.click(fn=on_browse_checkpoint, inputs=[cellvit_ckpt_box], outputs=[cellvit_ckpt_box])
+        extract_yes_btn.click(
+            fn=on_extract_confirm_yes,
+            inputs=[
+                wsi_path_box, base_feat_dir_box,
+                reports_path_box, hipt_4096_ckpt_box, hipt_256_ckpt_box,
+                conch_ckpt_box, cellvit_ckpt_box,
+                sess,
+            ],
+            outputs=[sess, status_box, extract_confirm_group, extraction_inputs_col, readiness_col],
+        )
+        extract_no_btn.click(
+            fn=on_extract_confirm_no,
+            inputs=[sess],
+            outputs=[sess, status_box, extract_confirm_group, extraction_inputs_col, readiness_col],
+        )
+
+        readiness_inputs = [
+            wsi_path_box,
+            base_feat_dir_box,
+            reports_path_box,
+            hipt_4096_ckpt_box,
+            hipt_256_ckpt_box,
+            conch_ckpt_box,
+            cellvit_ckpt_box,
+        ]
+
+        for comp in readiness_inputs:
+            comp.change(fn=on_readiness_change, inputs=readiness_inputs, outputs=[readiness_box])
+
+        _check_feat_inputs = [wsi_path_box, base_feat_dir_box, sess]
+        _check_feat_outputs = [sess, status_box, extract_prompt_md, extract_confirm_group]
+        wsi_path_box.change(fn=on_check_features, inputs=_check_feat_inputs, outputs=_check_feat_outputs)
+        base_feat_dir_box.change(fn=on_check_features, inputs=_check_feat_inputs, outputs=_check_feat_outputs)
 
         load_btn.click(
             fn=on_load,
             inputs=[
                 wsi_path_box, base_feat_dir_box, encoder_ckpt_box,
                 model_name_box, device_box,
+                reports_path_box,
+                hipt_4096_ckpt_box,
+                hipt_256_ckpt_box,
+                conch_ckpt_box,
+                cellvit_ckpt_box,
                 sess,
             ],
-            outputs=[sess, status_box, log_box],
+            outputs=[
+                sess,
+                status_box,
+                log_box,
+                extract_prompt_md,
+                extract_confirm_group,
+                extraction_inputs_col,
+                readiness_col,
+            ],
         )
 
         reload_btn.click(
@@ -670,9 +1254,22 @@ def build_app() -> gr.Blocks:
             inputs=[
                 wsi_path_box, base_feat_dir_box, encoder_ckpt_box,
                 model_name_box, device_box,
+                reports_path_box,
+                hipt_4096_ckpt_box,
+                hipt_256_ckpt_box,
+                conch_ckpt_box,
+                cellvit_ckpt_box,
                 sess,
             ],
-            outputs=[sess, status_box, log_box],
+            outputs=[
+                sess,
+                status_box,
+                log_box,
+                extract_prompt_md,
+                extract_confirm_group,
+                extraction_inputs_col,
+                readiness_col,
+            ],
         )
 
         refresh_btn.click(
@@ -711,6 +1308,7 @@ def main():
     args = parser.parse_args()
 
     app = build_app()
+    app.queue()
     app.launch(
         server_name=args.host,
         server_port=args.port,

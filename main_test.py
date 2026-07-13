@@ -5,10 +5,12 @@ import os
 import json
 import re
 import argparse
+from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 
 import torch
+import torch.nn.functional as F
 
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from nltk.translate.meteor_score import meteor_score
@@ -18,9 +20,12 @@ BERTSCORE_MODEL = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext
 BERTSCORE_NUM_LAYERS = 9  # optimal layer for BERT-base architecture (per bert_score paper)
 BERTSCORE_MAX_WORDS = 256  # pre-truncate to ~512 tokens (1 word ≈ 2 tokens)
 TEST_TYPES = ("Morphology", "Caption", "Classification", "Report")
+QUERY_DIRECTIONS = ("report_to_slide", "slide_to_report", "both")
 
 from mllm_hwsi import VLProjectorConfig, MLLMHWSI
 from main_utils import (
+    build_hierarchical_text_reps,
+    get_visual_scale_reps,
     normalize_text,
     apply_lora_to_llm,
     normalize_model_source,
@@ -282,6 +287,254 @@ def compute_text_metrics(prediction: str, reference: str) -> Dict[str, float]:
     }
 
 
+def aggregate_metric_statistics(outputs: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+    metric_values: Dict[str, List[float]] = defaultdict(list)
+
+    for item in outputs:
+        metrics = item.get("metrics", {})
+        if not isinstance(metrics, dict):
+            continue
+        for key, value in metrics.items():
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                metric_values[key].append(float(value))
+
+    summary: Dict[str, Dict[str, float]] = {}
+    for key, values in metric_values.items():
+        if not values:
+            continue
+        summary[key] = {
+            "min": min(values),
+            "max": max(values),
+            "avg": sum(values) / len(values),
+            "count": len(values),
+        }
+
+    return summary
+
+
+def parse_direction(value: str) -> str:
+    key = (value or "").strip().lower()
+    mapping = {name.lower(): name for name in QUERY_DIRECTIONS}
+    if key not in mapping:
+        allowed = ", ".join(QUERY_DIRECTIONS)
+        raise argparse.ArgumentTypeError(f"Invalid --direction '{value}'. Allowed: {allowed}")
+    return mapping[key]
+
+
+def append_mode_to_output_path(output_path: str, mode: str) -> str:
+    path = Path(output_path)
+    suffixes = "".join(path.suffixes)
+    stem = path.name[:-len(suffixes)] if suffixes else path.name
+    mode_suffix = f"_{mode.lower()}"
+    if stem.lower().endswith(mode_suffix):
+        return str(path)
+    return str(path.with_name(f"{stem}{mode_suffix}{suffixes}"))
+
+
+def extract_report_text(record: Dict[str, Any]) -> str:
+    for key in ("report", "caption", "text"):
+        value = record.get(key)
+        if value is not None:
+            text = normalize_text(str(value))
+            if text:
+                return text
+
+    question = normalize_text(str(record.get("question", "")))
+    answer = normalize_text(str(record.get("T-answer", record.get("answer", ""))))
+    if question and answer:
+        return f"{question} {answer}".strip()
+    return question or answer
+
+
+def build_slide_documents(records: List[Dict[str, Any]], test_type: str) -> List[Dict[str, Any]]:
+    grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        row_type = str(record.get("metadata", "")).strip()
+        if row_type and row_type.lower() != test_type.lower():
+            continue
+        slide_id = str(record.get("slide_id") or record.get("_slide_id") or "").strip()
+        if not slide_id:
+            continue
+        grouped[slide_id].append(record)
+
+    documents: List[Dict[str, Any]] = []
+    for slide_id in sorted(grouped):
+        texts: List[str] = []
+        seen_texts = set()
+        for row in grouped[slide_id]:
+            report_text = extract_report_text(row)
+            if report_text and report_text not in seen_texts:
+                texts.append(report_text)
+                seen_texts.add(report_text)
+
+        if not texts:
+            continue
+
+        documents.append(
+            {
+                "slide_id": slide_id,
+                "records": grouped[slide_id],
+                "report_text": " \n".join(texts),
+            }
+        )
+
+    return documents
+
+
+def combine_scale_reps(scale_reps: Dict[str, torch.Tensor]) -> torch.Tensor:
+    ordered = [scale_reps[key].squeeze(0) for key in ("cell", "patch", "region", "wsi")]
+    stacked = torch.stack(ordered, dim=0)
+    return F.normalize(stacked.mean(dim=0), dim=-1)
+
+
+def embed_slide(model: MLLMHWSI, slide_id: str, feat_dirs: Dict[str, str]) -> torch.Tensor:
+    wsi, region, patch, cell = load_slide_feature_quadruplet(
+        slide_id=slide_id,
+        wsi_feat_dir=feat_dirs["wsi_feat_dir"],
+        region_feat_dir=feat_dirs["region_feat_dir"],
+        patch_feat_dir=feat_dirs["patch_feat_dir"],
+        cell_feat_dir=feat_dirs["cell_feat_dir"],
+        cell_pt_filename=feat_dirs["cell_pt_filename"],
+    )
+
+    encoder_device = next(model.vl_projector.parameters()).device
+    wsi = wsi.to(encoder_device)
+    region = region.to(encoder_device)
+    patch = patch.to(encoder_device)
+    cell = cell.to(encoder_device)
+
+    with torch.no_grad():
+        _, visual_reps = get_visual_scale_reps(model, wsi, region, patch, cell)
+        return combine_scale_reps(visual_reps).detach().cpu()
+
+
+def embed_text(model: MLLMHWSI, text: str) -> torch.Tensor:
+    with torch.no_grad():
+        text_reps = build_hierarchical_text_reps(
+            tokenizer=model.tokenizer,
+            embed_tokens=model.embed_tokens,
+            answers=[text],
+            device=torch.device(model.device),
+            dtype=next(model.embed_tokens.parameters()).dtype,
+        )
+        return combine_scale_reps(text_reps).detach().cpu()
+
+
+def rank_indices(query_vec: torch.Tensor, gallery_vecs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    query_vec = F.normalize(query_vec.float(), dim=-1)
+    gallery_vecs = F.normalize(gallery_vecs.float(), dim=-1)
+    scores = gallery_vecs @ query_vec
+    return torch.argsort(scores, descending=True), scores
+
+
+def retrieval_metrics(ranks: List[int]) -> Dict[str, float]:
+    total = max(1, len(ranks))
+    recall_1 = sum(rank <= 1 for rank in ranks) / total
+    recall_3 = sum(rank <= 3 for rank in ranks) / total
+    recall_5 = sum(rank <= 5 for rank in ranks) / total
+    recall_10 = sum(rank <= 10 for rank in ranks) / total
+    return {
+        "Recall@1": recall_1,
+        "Recall@3": recall_3,
+        "Recall@5": recall_5,
+        "Recall@10": recall_10,
+        "Recall@avg": (recall_1 + recall_3 + recall_5 + recall_10) / 4.0,
+        "MRR": sum(1.0 / rank for rank in ranks) / total,
+    }
+
+
+def run_slide_report_retrieval(
+    model: MLLMHWSI,
+    records: List[Dict[str, Any]],
+    feat_dirs: Dict[str, str],
+    test_type: str,
+    direction: str,
+    top_k: int,
+    output_path: str,
+):
+    docs = build_slide_documents(records, test_type)
+    if not docs:
+        raise ValueError(f"No {test_type} records were available for retrieval.")
+
+    print(f"Building retrieval index for {len(docs)} slides")
+    slide_embeddings: List[torch.Tensor] = []
+    text_embeddings: List[torch.Tensor] = []
+    for doc in docs:
+        slide_embeddings.append(embed_slide(model, doc["slide_id"], feat_dirs))
+        text_embeddings.append(embed_text(model, doc["report_text"]))
+
+    slide_matrix = torch.stack(slide_embeddings, dim=0)
+    text_matrix = torch.stack(text_embeddings, dim=0)
+    outputs: List[Dict[str, Any]] = []
+
+    if direction in {"report_to_slide", "both"}:
+        ranks: List[int] = []
+        for idx, doc in enumerate(docs):
+            top_indices, scores = rank_indices(text_matrix[idx], slide_matrix)
+            rank = int((top_indices == idx).nonzero(as_tuple=False)[0].item()) + 1
+            ranks.append(rank)
+            outputs.append(
+                {
+                    "direction": "report_to_slide",
+                    "slide_id": doc["slide_id"],
+                    "report_text": doc["report_text"],
+                    "rank": rank,
+                    "results": [
+                        {
+                            "slide_id": docs[j]["slide_id"],
+                            "score": float(scores[j].item()),
+                            "report_text": docs[j]["report_text"],
+                        }
+                        for j in top_indices[:top_k].tolist()
+                    ],
+                }
+            )
+
+        metrics = retrieval_metrics(ranks)
+        print("REPORT -> SLIDE")
+        for key, value in metrics.items():
+            print(f"{key}: {value:.4f}")
+        outputs.append({"direction": "report_to_slide_metrics", **metrics})
+
+    if direction in {"slide_to_report", "both"}:
+        ranks = []
+        for idx, doc in enumerate(docs):
+            top_indices, scores = rank_indices(slide_matrix[idx], text_matrix)
+            rank = int((top_indices == idx).nonzero(as_tuple=False)[0].item()) + 1
+            ranks.append(rank)
+            outputs.append(
+                {
+                    "direction": "slide_to_report",
+                    "slide_id": doc["slide_id"],
+                    "rank": rank,
+                    "results": [
+                        {
+                            "slide_id": docs[j]["slide_id"],
+                            "score": float(scores[j].item()),
+                            "report_text": docs[j]["report_text"],
+                        }
+                        for j in top_indices[:top_k].tolist()
+                    ],
+                }
+            )
+
+        metrics = retrieval_metrics(ranks)
+        print("SLIDE -> REPORT")
+        for key, value in metrics.items():
+            print(f"{key}: {value:.4f}")
+        outputs.append({"direction": "slide_to_report_metrics", **metrics})
+
+    final_output = append_mode_to_output_path(output_path, "retrieval")
+    os.makedirs(os.path.dirname(final_output) or ".", exist_ok=True)
+    with open(final_output, "w", encoding="utf-8") as handle:
+        for item in outputs:
+            handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+    print(f"Saved retrieval results to: {final_output}")
+
+
 def parse_test_type(value: str) -> str:
     key = (value or "").strip().lower()
     mapping = {name.lower(): name for name in TEST_TYPES}
@@ -365,6 +618,21 @@ def parse_args():
         default="Report",
         help="Test subset in metadata: Morphology, Caption, Classification, or Report",
     )
+    parser.add_argument(
+        "--task",
+        type=str,
+        default="eval",
+        choices=["eval", "retrieval"],
+        help="Run the generation evaluation or slide/report retrieval",
+    )
+    parser.add_argument(
+        "--direction",
+        type=parse_direction,
+        default="both",
+        help="Retrieval direction: report_to_slide, slide_to_report, or both",
+    )
+    parser.add_argument("--top_k", type=int, default=20, 
+                        help="Number of top results to save for retrieval")
 
     parser.add_argument("--wsi_feat_dir", type=str, required=True)
     parser.add_argument("--region_feat_dir", type=str, required=True)
@@ -419,8 +687,12 @@ def main():
         raise ValueError(
             f"No records found in {gt_json_path} with metadata='{args.test_type}' that map to available slide IDs."
         )
-    final_output_json = append_test_type_to_output_path(args.output_json, args.test_type)
-    print(f"Running {args.test_type} test on {len(selected_records)} records.")
+    if args.task == "retrieval":
+        final_output_json = append_mode_to_output_path(args.output_json, "retrieval")
+        print(f"Running slide/report retrieval on {len(selected_records)} records.")
+    else:
+        final_output_json = append_test_type_to_output_path(args.output_json, args.test_type)
+        print(f"Running {args.test_type} test on {len(selected_records)} records.")
 
     cfg = VLProjectorConfig(
         llm_dim=args.llm_dim,
@@ -469,6 +741,26 @@ def main():
         print("Unexpected keys:", unexpected)
 
     model.eval()
+
+    if args.task == "retrieval":
+        feat_dirs = {
+            "wsi_feat_dir": args.wsi_feat_dir,
+            "region_feat_dir": args.region_feat_dir,
+            "patch_feat_dir": args.patch_feat_dir,
+            "cell_feat_dir": args.cell_feat_dir,
+            "cell_pt_filename": args.cell_pt_filename,
+        }
+        run_slide_report_retrieval(
+            model=model,
+            records=selected_records,
+            feat_dirs=feat_dirs,
+            test_type=args.test_type,
+            direction=args.direction,
+            top_k=args.top_k,
+            output_path=final_output_json,
+        )
+        return
+
     outputs: List[Dict[str, Any]] = []
     cls_predictions: List[str] = []
     cls_references: List[str] = []
@@ -597,12 +889,40 @@ def main():
         print(f"BERTScore F1 (mean): {bert_results.get('f1', 0.0):.6f}")
         print("=" * 80)
 
+    aggregate_stats = aggregate_metric_statistics(outputs)
+    if aggregate_stats:
+        print("=" * 80)
+        print("AGGREGATE METRICS (MIN / MAX / AVG)")
+        for metric_name in sorted(aggregate_stats):
+            stat = aggregate_stats[metric_name]
+            print(
+                f"{metric_name}: "
+                f"min={stat['min']:.6f}, "
+                f"max={stat['max']:.6f}, "
+                f"avg={stat['avg']:.6f}, "
+                f"count={int(stat['count'])}"
+            )
+        print("=" * 80)
+
     os.makedirs(os.path.dirname(final_output_json) or ".", exist_ok=True)
     with open(final_output_json, "w", encoding="utf-8") as f:
         for item in outputs:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
+    summary_output_json = str(Path(final_output_json).with_name(f"{Path(final_output_json).stem}_summary.json"))
+    summary_payload = {
+        "task": args.task,
+        "test_type": args.test_type,
+        "num_samples": len(outputs),
+        "num_success": sum(1 for item in outputs if "metrics" in item),
+        "num_errors": sum(1 for item in outputs if "error" in item),
+        "aggregate_metrics": aggregate_stats,
+    }
+    with open(summary_output_json, "w", encoding="utf-8") as f:
+        json.dump(summary_payload, f, ensure_ascii=False, indent=2)
+
     print(f"Saved outputs to: {final_output_json}")
+    print(f"Saved summary to: {summary_output_json}")
 
 
 if __name__ == "__main__":

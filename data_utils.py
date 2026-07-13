@@ -3,6 +3,7 @@
 
 import json
 import os
+import random
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -10,8 +11,59 @@ import torch
 
 
 def set_seed(seed: int = 42):
+    random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+REPORT_PROMPT_TEMPLATES = [
+    (
+        "You are an expert histopathology report writer.\n"
+        "Write a slide-grounded pathology report with morphology, diagnosis, and key findings.\n\n"
+        "Question:\n{question}\n"
+    ),
+    (
+        "You are a clinical pathology assistant preparing a formal report from a whole-slide image.\n"
+        "Use report-style language and keep the answer evidence-based.\n\n"
+        "Question:\n{question}\n"
+    ),
+    (
+        "Provide a concise but evidence-based histopathology report.\n"
+        "Focus on morphology, diagnosis, and any relevant invasive features.\n\n"
+        "Question:\n{question}\n"
+    ),
+    (
+        "You are given compressed multimodal pathology tokens extracted from a whole-slide image.\n"
+        "Summarize the slide findings in a report style and answer accurately.\n\n"
+        "Question:\n{question}\n"
+    ),
+]
+
+CONVERSATION_PROMPT_TEMPLATES = [
+    (
+        "You are a helpful pathology assistant chatting with a clinician.\n"
+        "Answer naturally and clearly while staying grounded in the slide evidence.\n\n"
+        "User: {question}\n"
+        "Assistant:\n"
+    ),
+    (
+        "You are in a clinical conversation about a whole-slide image.\n"
+        "Respond conversationally, but keep the answer precise and slide-specific.\n\n"
+        "User asks: {question}\n"
+        "Assistant:\n"
+    ),
+    (
+        "Act as a pathology expert in a dialogue setting.\n"
+        "Explain the findings in a conversational tone without losing diagnostic detail.\n\n"
+        "User: {question}\n"
+        "Assistant:\n"
+    ),
+    (
+        "You are given compressed multimodal pathology tokens extracted from a whole-slide image.\n"
+        "Reply like a helpful assistant in conversation with the user.\n\n"
+        "User: {question}\n"
+        "Assistant:\n"
+    ),
+]
 
 
 def find_slide_ids(wsi_dir: str) -> List[str]:
@@ -70,13 +122,12 @@ def load_tensor_or_keyed_tensor(path: str, allowed_keys=None) -> torch.Tensor:
     raise ValueError(f"Could not load tensor from {path}. Checked keys: {allowed_keys}")
 
 
-def build_prompt(question_text: str) -> str:
-    return (
-        "You are an expert histopathology assistant.\n"
-        "You are given compressed multimodal pathology tokens extracted from a whole-slide image.\n"
-        "Answer the user's histopathology question carefully and in detail.\n\n"
-        f"Question:\n{question_text}\n"
-    )
+def build_prompt(question_text: str, style: str = "report") -> str:
+    if style == "conversation":
+        template = random.choice(CONVERSATION_PROMPT_TEMPLATES)
+    else:
+        template = random.choice(REPORT_PROMPT_TEMPLATES)
+    return template.format(question=question_text)
 
 
 def ensure_batched_shapes(

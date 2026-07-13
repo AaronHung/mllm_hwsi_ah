@@ -183,49 +183,24 @@ Note:
 
 ### Stage 2: Training Cross-Modal V-L Projectors
 
+* Edit edit MODEL_DIR, BASE_DIR, and TRAIN_SUB_FOLDER in ```run_train.sh```. 
+
+* Run
 ```
-python main_train_proj_stage2.py \
-  --wsi_dir <Train WSI directory> \
-  --report_json <Train report json file path> \
-  --wsi_feat_dir <features save directory>/wsi \
-  --region_feat_dir <features save directory>/region_4k \
-  --patch_feat_dir <features save directory>/patches_filtered \
-  --cell_feat_dir <features save directory>/cells \
-  --cell_pt_filename encoded_cell_features.pt \
-  --save_dir <checkpoint save directory> \
-  --save_name vl_projector.pt \
-  --model_name Qwen/Qwen2.5-7B-Instruct \
-  --device cuda \
-  --batch_size 1 \
-  --lr 1e-6 \
-  --val_ratio 0.1 \
-  --num_slide_tokens 64
+./run_train.sh 2
 ```
 
 ### Stage 3: Task-specific Instruction Tuning
 
+* Run 
+
 ```
-python main_train_LLM_stage3.py \
-  --wsi_dir <Train WSI directory> \
-  --report_json <Train conversation json file path> \
-  --wsi_feat_dir <features save directory>/wsi \
-  --region_feat_dir <features save directory>/region_4k \
-  --patch_feat_dir <features save directory>/patches_filtered \
-  --cell_feat_dir <features save directory>/cells \
-  --cell_pt_filename encoded_cell_features.pt \
-  --stage2_ckpt <stage 2 projector saved path> \
-  --save_dir <directory to save huggingFace model> \
-  --model_name Qwen/Qwen2.5-7B-Instruct \
-  --lora_r 128 \
-  --lora_alpha 256 \
-  --epochs 50 \
-  --batch_size 1 \
-  --val_ratio 0.1 \
-  --lr 2e-5 \
-  --llm_lr 2e-5 \
-  --projector_lr 5e-5 \
-  --autocast_enabled \
-  --save_name <save name.pt>
+./run_train.sh 3
+```
+
+* To train both stage 2 and 3 at once, you can run
+```
+./run_train.sh 2 3
 ```
 
 ## Inference
@@ -239,23 +214,14 @@ python main_train_LLM_stage3.py \
 
 ### 2. Test:
 
-* Use the ```--test_type``` parameter to select the type of test you want to perform.
+* Edit edit BASE_DIR, DATA_DIR, TEST_TYPE, TASK in ```run_infer.sh```. 
 
+* Run
 ```
-python main_test.py \
-  --wsi_dir <Test WSI directory> \
-  --gt_json_path <Test json file path> \
-  --test_type <Morphology, Caption, Classification, or Report> \
-  --wsi_feat_dir <features save directory>/wsi \
-  --region_feat_dir <features save directory>/region_4k \
-  --patch_feat_dir <features save directory>/patches_filtered \
-  --cell_feat_dir <features save directory>/cells \
-  --cell_pt_filename encoded_cell_features.pt \
-  --output_json <output json result path> \
-  --model_name Bastech/MLLM-HWSI
+./run_infer.sh
 ```
 
-* Note: Other customizations are available in the respective python file. You may tweak them to your particular applications.
+* Note: Other customizations are available in ```main_test.py``` file. You may tweak them to your particular applications.
 
 ## MLLM-HWSI ChatBot
 
