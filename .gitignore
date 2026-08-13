@@ -9,6 +9,9 @@ vl_projector.pt
 # ---- 實驗輸出(特徵檔、cells、regions、推論結果)----
 outputs/
 
+# ---- 分析中間產物(可由 analysis/scripts/01 與 03 重新產生)----
+analysis/tables/*.npz
+
 # ---- 原始影像與資料集 ----
 data/
 *.svs

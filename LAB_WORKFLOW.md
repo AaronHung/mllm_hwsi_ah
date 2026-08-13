@@ -9,7 +9,7 @@
 
 - **上游來源**:[BasitAlawode/MLLM-HWSI](https://github.com/BasitAlawode/MLLM-HWSI)(CVPR 2026)
 - **本 fork 的用途**:在此基礎上做多尺度特徵抽取,並進行 WSI 持續學習(CL)/ 測試時自適應(CTTA)的前期診斷實驗
-- **本地新增**:`Ours/`(推論協定與探針腳本)、`utils/`、批次執行腳本、本文件
+- **本地新增**:`Ours/`(推論協定與探針腳本)、`analysis/`(CL/CTTA 前期診斷實驗)、`utils/`、批次執行腳本、本文件
 
 ### ⚠️ 未包含在 repo 中的內容
 
@@ -234,7 +234,51 @@ python -m unittest discover -s Ours/tests -v
 
 ---
 
-## 7. 已知問題與注意事項
+## 7. 前期診斷分析(`analysis/`)
+
+CL / CTTA 的前期診斷實驗:確認域偏移是否存在、集中在哪個尺度。
+**完整方法、數字與結論見 [analysis/EXPERIMENT_REPORT.md](analysis/EXPERIMENT_REPORT.md)。**
+
+### 執行順序
+
+前置需求:`outputs/brca_pilot40_k48/` 的特徵已抽好(§3 Stage 1–3)。
+
+```bash
+conda activate mllm_hwsi
+pip install umap-learn          # 若尚未安裝
+cd analysis/scripts
+
+python 01_build_wsi_level_features.py      # WSI 層級 mean-pooled 特徵 + 標籤
+python 03_build_instance_level_features.py # instance(region)層級特徵
+python 02_umap_by_site_within_subtype.py   # A.1 依 site 上色 UMAP ×4
+python 04_umap_all40_by_class.py           # 依亞型上色 sanity check
+python 05_a2_quantitative_domain_shift.py  # A.2 A-distance + MMD 定量表
+```
+
+腳本路徑由 `__file__` 推導,不含絕對路徑,換機器可直接執行。
+
+### 檔案
+
+| 路徑 | 內容 |
+|---|---|
+| `analysis/EXPERIMENT_REPORT.md` | **完整實驗報告**(方法、結果、結論、限制、待辦) |
+| `analysis/scripts/` | 7 支腳本(含 `domain_shift_utils.py`、`plot_config.py`) |
+| `analysis/figures/` | 5 張 UMAP 圖 |
+| `analysis/tables/` | 交叉表、標籤表、A.2 定量結果 CSV |
+| `analysis/pilot40_selection.csv` | 40 張 WSI 的 selection 清單 |
+
+`analysis/tables/*.npz` 為中間產物,不進版控,執行 `01` 與 `03` 即可重新產生。
+
+### 主要結論(摘要)
+
+1. 機構(TSS)造成的偏移確實存在,但**依亞型差異很大**:KIRC 最明顯(猜對率 81–94%),IDC 幾乎測不到(region 僅 51.2%,等同亂猜)。
+2. 偏移**集中在 region(=wsi)尺度**,四個亞型中有三個如此,**與「cell/patch 偏移最大」的原始假設方向相反**。
+3. cell 尺度未表現出「免疫於機構干擾」的優勢,屬中等。
+4. ⚠️ **尚有未排除的混淆**:A-distance 高也可能只是 region 表達力較強(任何標籤都好預測),而非特別髒。驗證方式與後續待辦見報告 §7.2、§11。
+
+---
+
+## 8. 已知問題與注意事項
 
 1. **`.sh` 腳本有絕對路徑**,換機器須改(見 §6)。
 2. **WSI 尺度與 region 尺度數值完全相同**,做多尺度比較時不應視為兩個獨立證據(見 §4 註記一)。
@@ -244,7 +288,7 @@ python -m unittest discover -s Ours/tests -v
 
 ---
 
-## 8. 授權與引用
+## 9. 授權與引用
 
 本 repo 為 [BasitAlawode/MLLM-HWSI](https://github.com/BasitAlawode/MLLM-HWSI) 的 fork。上游專案未附 LICENSE 檔,**使用與再散布前請先向原作者確認授權條件**。
 
