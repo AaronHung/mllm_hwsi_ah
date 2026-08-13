@@ -152,7 +152,7 @@ def main():
         verdict = "PASS" if gate.any() else "FAIL"
         (RESULTS / f"gate1_{args.task}_summary.md").write_text(
             f"# Gate 1 — {args.task}\n\n"
-            f"{agg.round(3).to_markdown()}\n\n"
+            f"```\n{agg.round(3).to_string()}\n```\n\n"
             f"**Gate 1（learned > random 至少一個 K）：{verdict}**\n"
             f"（判準細節與逐折數據見 gate1_{args.task}_{tag}.csv）\n")
         print(f"Gate 1 verdict: {verdict}")

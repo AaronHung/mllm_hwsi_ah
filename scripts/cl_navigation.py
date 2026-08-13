@@ -184,7 +184,7 @@ def main():
 
     if not args.smoke:
         summary = ["# Gate 2/3 — navigation forgetting 與緩解（K=%d）" % args.k, "",
-                   agg.round(3).to_markdown(), "",
+                   "```", agg.round(3).to_string(), "```", "",
                    "- `seqft` = Gate 2 sequential fine-tuning baseline",
                    "- `distill` = Gate 3 utility-weighted policy distillation + state replay",
                    "- evaluator 凍結（navigation-only protocol），T1 掉分只可能來自導航行為改變",
