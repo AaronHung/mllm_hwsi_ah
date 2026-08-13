@@ -1,0 +1,7 @@
+# nav/ 系列實驗的輕量依賴（不含 MLLM-HWSI 推論所需的 transformers 等重件）
+torch>=2.2
+numpy
+pandas
+scikit-learn
+matplotlib
+h5py
