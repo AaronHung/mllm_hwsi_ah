@@ -1,0 +1,53 @@
+# ---- 模型權重 / checkpoints(勿上傳,請依 README 自行下載)----
+checkpoints/
+*.pth
+*.bin
+*.safetensors
+*.ckpt
+vl_projector.pt
+
+# ---- 實驗輸出(特徵檔、cells、regions、推論結果)----
+outputs/
+
+# ---- 原始影像與資料集 ----
+data/
+*.svs
+*.ndpi
+*.tiff
+*.tif
+*.h5
+
+# ---- 打包檔 ----
+*.zip
+*.tar
+*.tar.gz
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ---- 虛擬環境 ----
+.venv/
+venv/
+env/
+
+# ---- 備份 / 暫存 ----
+*.bak
+*.log
+*.tmp
+*.swp
+
+# ---- 編輯器 / 系統 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

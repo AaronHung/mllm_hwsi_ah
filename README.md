@@ -1,3 +1,13 @@
+> [!NOTE]
+> **這是 NSYSU AI Visual Lab 的 fork,不是原始專案。**
+> 上游來源:[BasitAlawode/MLLM-HWSI](https://github.com/BasitAlawode/MLLM-HWSI)(CVPR 2026)。
+> 以下為**上游原作者的 README 原文**,未經修改。
+> 本實驗室的實際執行流程、本地新增內容與已知問題,請見 **[LAB_WORKFLOW.md](LAB_WORKFLOW.md)**。
+>
+> 模型權重(`checkpoints/`)、實驗輸出(`outputs/`)與 WSI 資料集(`data/`)未包含在本 repo 中,取得方式見 LAB_WORKFLOW.md。
+
+---
+
 <img src="./assets/Logo.PNG" align="left" width="60" height="60" alt="Project Logo">
 
 # MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding

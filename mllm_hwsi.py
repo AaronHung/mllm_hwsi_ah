@@ -489,7 +489,7 @@ class MLLMHWSI(nn.Module):
         ).to(device)
 
         # Keep VL projector in fp32 for stability; load projector weights explicitly via checkpoint.
-        self.vl_projector = MultiLevelProjectorEncoder(projector_cfg).to(device=device, dtype=torch.float32)
+        self.vl_projector = MultiLevelProjectorEncoder(projector_cfg).to(dtype=torch.float32)
         self.embed_tokens = self.llm.get_input_embeddings()
 
         if self.tokenizer.pad_token is None:
