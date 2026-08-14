@@ -64,3 +64,7 @@ Thumbs.db
 !runs/v2/**/*.md
 !runs/v2/**/*.png
 !runs/v2/**/*.log
+# Mechanism-probe raw state dumps and portable checkpoints stay on the
+# persistent volume; commit the summarized report/figures instead.
+runs/v2/**/*.jsonl
+runs/v2/**/*.pt
