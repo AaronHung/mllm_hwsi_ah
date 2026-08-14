@@ -15,6 +15,8 @@ export PYTORCH_ENABLE_MPS_FALLBACK="${PYTORCH_ENABLE_MPS_FALLBACK:-1}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 if [[ -x "$ROOT/.venv/bin/python" ]]; then
     PYTHON_BIN="$ROOT/.venv/bin/python"
+elif [[ -n "${VENV_DIR:-}" && -x "$VENV_DIR/bin/python" ]]; then
+    PYTHON_BIN="$VENV_DIR/bin/python"
 elif [[ -x "${NAVIPATH_VENV:-$HOME/research/01_navipath/.venv/bin/python}" ]]; then
     # Local compatibility with the already-tested NaviPath environment.
     PYTHON_BIN="${NAVIPATH_VENV:-$HOME/research/01_navipath/.venv/bin/python}"

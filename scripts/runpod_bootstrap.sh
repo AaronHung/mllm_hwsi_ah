@@ -9,7 +9,7 @@ set -euo pipefail
 
 WORKSPACE_ROOT="${WORKSPACE_ROOT:-/workspace}"
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-CAN_ROOT="${CAN_ROOT:-$WORKSPACE_ROOT/can_dataset_min}"
+CAN_ROOT="${CAN_ROOT:-$WORKSPACE_ROOT/datasets/can_dataset}"
 VENV_DIR="${VENV_DIR:-$WORKSPACE_ROOT/venvs/mllm_hwsi_ah}"
 BIN_DIR="${BIN_DIR:-$WORKSPACE_ROOT/bin}"
 STATE_DIR="${STATE_DIR:-$WORKSPACE_ROOT/.mllm_hwsi_ah}"
@@ -63,6 +63,7 @@ write_env_file() {
 export PROJECT_DIR=$(printf '%q' "$PROJECT_DIR")
 export CAN_ROOT=$(printf '%q' "$CAN_ROOT")
 export VENV_DIR=$(printf '%q' "$VENV_DIR")
+export PYTHON_BIN=$(printf '%q' "$VENV_DIR/bin/python")
 export RUN_ROOT=$(printf '%q' "$PROJECT_DIR/runs/v2")
 export PYTHONPATH=$(printf '%q' "$PROJECT_DIR")
 export PYTORCH_ENABLE_MPS_FALLBACK=1

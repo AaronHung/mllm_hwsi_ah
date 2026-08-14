@@ -5,6 +5,8 @@ GitHub → Mac analysis. It is intentionally interactive: Aaron runs one block,
 pastes its output, and only then do we continue. The agent cannot SSH into the
 pod or infer its state.
 
+For a short restart card, see [`RUNPOD_QUICKSTART.md`](RUNPOD_QUICKSTART.md).
+
 ## Non-negotiable rules
 
 1. Run `scripts/smoke_test.sh --all` on the Mac before pushing a code change.

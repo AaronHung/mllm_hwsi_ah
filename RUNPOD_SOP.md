@@ -1,6 +1,7 @@
 # RunPod SOP — mllm_hwsi_ah
 
-> **v2 canonical SOP:** use [`docs/RUNPOD_SOP.md`](docs/RUNPOD_SOP.md).
+> **v2 canonical SOP:** use [`docs/RUNPOD_SOP.md`](docs/RUNPOD_SOP.md) or the
+> [`restart card`](docs/RUNPOD_QUICKSTART.md).
 > This file is retained as the Protocol-v1 historical reference; new runs
 > must use `runs/v2/<run_tag>/` and must not write the paths below.
 
