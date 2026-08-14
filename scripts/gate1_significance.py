@@ -178,7 +178,7 @@ def analyze(df_a: pd.DataFrame, df_b: pd.DataFrame, budgets) -> str:
                                    mean=dr.mean(), lo=ci[0], hi=ci[1], p=p))
 
     st = pd.DataFrame(stats_rows)
-    n_pos = int(((st.diff == "learned-random") & (st.lo > 0)).sum())
+    n_pos = int(((st["diff"] == "learned-random") & (st["lo"] > 0)).sum())
     lines.append(f"\n**G1' 判準（learned−random 的 95% CI > 0，至少 2 個 K）："
                  f"CI>0 的設定數 = {n_pos} → "
                  f"{'PASS' if n_pos >= 2 else 'FAIL'}**\n")
