@@ -13,12 +13,12 @@ REGION_DIM = 192  # HIPT region 特徵（低倍全可見）
 
 
 class Evaluator(nn.Module):
-    """診斷頭：聚合後的高倍證據 (512,) -> n_classes。"""
+    """診斷頭：聚合後的高倍證據 (in_dim,) -> n_classes。"""
 
-    def __init__(self, n_classes: int, hidden: int = 256):
+    def __init__(self, n_classes: int, hidden: int = 256, in_dim: int = PATCH_DIM):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(PATCH_DIM, hidden), nn.ReLU(), nn.Dropout(0.2),
+            nn.Linear(in_dim, hidden), nn.ReLU(), nn.Dropout(0.2),
             nn.Linear(hidden, hidden // 4), nn.ReLU(),
             nn.Linear(hidden // 4, n_classes))
 
@@ -29,14 +29,16 @@ class Evaluator(nn.Module):
 class Navigator(nn.Module):
     """共享導航策略：對每個候選 region 打分。
 
-    輸入 = 候選 region 的低倍特徵 (192) ⊕ context（目前證據 mean 512 ⊕ 剩餘 budget 1）。
+    輸入 = 候選 region 的低倍特徵 (low_dim) ⊕ context（目前證據 mean high_dim ⊕ 剩餘 budget 1）。
     輸出 = 每個候選一個 logit；policy = softmax over 未 zoom 的候選。
+    預設維度 = pilot40（HIPT 192 / CONCH 512）；can_dataset 用 low_dim=64。
     """
 
-    def __init__(self, hidden: int = 256):
+    def __init__(self, hidden: int = 256, low_dim: int = REGION_DIM,
+                 high_dim: int = PATCH_DIM):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(REGION_DIM + PATCH_DIM + 1, hidden), nn.ReLU(),
+            nn.Linear(low_dim + high_dim + 1, hidden), nn.ReLU(),
             nn.Linear(hidden, hidden // 4), nn.ReLU(),
             nn.Linear(hidden // 4, 1))
 

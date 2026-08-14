@@ -45,7 +45,7 @@ def build_bank(ds, sids: list[str], label_of: dict[str, int]) -> list[Slide]:
 # ---------------------------------------------------------------- env helpers
 def evidence_of(slide: Slide, zoomed: list[int], device) -> torch.Tensor:
     if not zoomed:
-        return torch.zeros(PATCH_DIM, device=device)
+        return torch.zeros(slide.high.shape[1], device=device)
     return slide.high[zoomed].to(device).mean(0)
 
 
@@ -99,7 +99,7 @@ def train_evaluator(bank: list[Slide], n_classes: int, k: int, device,
                     lr: float = 1e-3, seed: int = 0) -> Evaluator:
     """random K-子集當 augmentation，訓練診斷頭。"""
     g = torch.Generator().manual_seed(seed)
-    model = Evaluator(n_classes).to(device)
+    model = Evaluator(n_classes, in_dim=bank[0].high.shape[1]).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     model.train()
     for _ in range(epochs):
@@ -133,7 +133,11 @@ def train_navigator(steps: list[TeacherStep], device, navigator: Navigator | Non
     以該 state 的 diagnostic utility 加權（Gate 3 機制）。
     """
     rng = np.random.default_rng(seed)
-    nav = navigator if navigator is not None else Navigator().to(device)
+    if navigator is None:
+        low_dim = steps[0].low.shape[1]
+        high_dim = steps[0].context.shape[0] - 1
+        navigator = Navigator(low_dim=low_dim, high_dim=high_dim).to(device)
+    nav = navigator
     opt = torch.optim.Adam(nav.parameters(), lr=lr, weight_decay=1e-4)
     nav.train()
 

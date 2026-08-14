@@ -75,6 +75,39 @@ git push
 | 看有哪些 session | `tmux ls` |
 | 殺掉 session | `tmux kill-session -t run` |
 
+## 4b. 主實驗（cl_main：can_dataset 4 任務序列）
+
+can_dataset 原始特徵不必上 RunPod——實驗只吃 `data/can_cache/`（約 200MB，Mac 端
+`scripts/prep_can_cache.py` 產出）。傳輸：
+
+```bash
+# --- Mac：打包 cache（一次） ---
+cd /Users/aaron/research/01_mllm_hwsi/mllm_hwsi_ah/data
+tar -czf can_cache.tgz can_cache
+scp -P <PORT> can_cache.tgz root@<POD_IP>:/workspace/mllm_hwsi_ah/data/
+
+# --- Pod：解壓 ---
+cd /workspace/mllm_hwsi_ah/data && tar -xzf can_cache.tgz && rm can_cache.tgz
+# split npz 已含在 cache？否 —— fold split 需要 can_dataset 的 datasplit：
+scp -P <PORT> -r /Users/aaron/research/can_dataset/tcga_*/datasplit \
+    root@<POD_IP>:/workspace/can_dataset_min/   # 見下方 CAN_ROOT 說明
+```
+
+> `nav/candata.py` 讀 `CAN_ROOT`（環境變數）找 table/datasplit；
+> RunPod 上設 `export CAN_ROOT=/workspace/can_dataset_min`（目錄結構要保持
+> `tcga_<cohort>/datasplit/fold_1.npz` 與 `tcga_<cohort>/table/*.csv`）。
+
+tmux 內跑（先 EWC λ 選擇一次，再兩個 order 全跑；`run_main_cl.sh` 會自動分片並在結束時 push）：
+
+```bash
+tmux new -s main
+cd /workspace/mllm_hwsi_ah && \
+python scripts/cl_main.py --dataset can --select-ewc-lambda 2>&1 | tee results/ewc_select.log && \
+bash scripts/run_main_cl.sh 8 2>&1 | tee results/main_cl_run.log && \
+git pull --rebase && git add results/ figures/ && \
+git commit -m "RunPod: main CL results (can, both orders)" && git push
+```
+
 ## 5. Mac 端取回結果
 
 ```bash
