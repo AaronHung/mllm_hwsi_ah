@@ -6,7 +6,7 @@
 \renewcommand{\ttdefault}{cmtt}   % 本機 TeX 缺 pcr（Courier）metrics
 
 \newcommand{\xx}[1]{\textbf{#1}}          % placeholder for pending numbers
-\newcommand{\method}{UPD-R}               % Utility-weighted Policy Distillation + Replay
+\newcommand{\method}{UWRD}               % Utility-Weighted Replay Distillation
 \def\x{{\mathbf x}}
 
 \title{Remembering Where to Look: Continual Learning of\\ Budgeted Visual Evidence Acquisition}
@@ -35,11 +35,10 @@ protocol on gigapixel whole-slide images (WSI), where coarse features are
 always visible but fine evidence is revealed only after a zoom action, and
 per-task predictors are frozen so any degradation is attributable to the
 policy. Without human viewing trajectories, we supervise the policy by
-counterfactual diagnostic gain, and we mitigate forgetting with
-utility-weighted policy distillation over compressed navigation states.
-Across two four-task and two-task TCGA sequences, our method recovers
-\xx{XX}\% of the forgetting gap to joint training while storing only
-kilobyte-scale states, and behavior-level metrics expose forgetting that
+counterfactual diagnostic gain, and study Utility-Weighted Replay Distillation
+as a targeted variant over compressed navigation states. Across two
+four-task and two-task TCGA sequences, replay and policy-fidelity distillation
+reduce acquisition drift while behavior-level metrics expose forgetting that
 accuracy alone misses.
 \end{abstract}
 
@@ -85,17 +84,18 @@ demonstrations are unavailable at scale (no expert viewing logs in TCGA); we
 derive per-step supervision from slide-level labels via \emph{counterfactual
 diagnostic gain} --- how much adding a candidate's evidence reduces the frozen
 evaluator's loss --- and train the policy by distribution imitation.
-\textbf{(3) Mitigation.} We propose utility-weighted policy distillation with
-compressed state replay (\method{}): old-task decision states are stored as
+\textbf{(3) Mitigation.} We analyze Utility-Weighted Replay Distillation
+(\method{}) as a targeted variant: old-task decision states are stored as
 kilobyte feature tuples, and the new policy is regularized toward the old one
-preferentially on high-utility states.
+preferentially on high-utility states. Uniform policy-fidelity distillation
+remains a strong comparison.
 \textbf{(4) Findings.} On four-task (ESCA$\to$LUNG$\to$RCC$\to$BRCA) and
 two-task TCGA sequences, sequential fine-tuning collapses selection overlap
 ($\xx{0.07}$ Jaccard at $K{=}2$) with small accuracy change at large budgets,
-while the budget--forgetting interaction confirms redundancy masking;
-\method{} restores behavioral stability (Jaccard $\xx{XX}$, action-KL
-$\xx{XX}$) and improves final average accuracy over sequential fine-tuning and
-standard CL baselines \cite{kirkpatrick2017ewc,li2017lwf}.
+while the budget--forgetting interaction supports redundancy masking;
+\method{} reduces drift in selected settings (Jaccard $\xx{XX}$, action-KL
+$\xx{XX}$), while its relative advantage over policy-fidelity distillation is
+budget- and order-dependent.
 
 WSI is our benchmark, not our claim: labels are weak, redundancy is
 quantifiable, and the coarse-to-fine structure is native. We make no clinical
@@ -226,8 +226,10 @@ $K \in \{1,2,4\}$, 5 seeds.
 
 \textbf{Baselines.} Sequential fine-tuning (seqft), EWC
 \cite{kirkpatrick2017ewc}, LwF-style policy distillation on new-task states
-\cite{li2017lwf}, replay-only, uniform distillation, \method{}, and joint
-training (upper bound). All share the identical frozen-evaluator protocol.
+\cite{li2017lwf}, counterfactual-teacher replay, old-policy /
+policy-fidelity distillation, replay plus uniform policy distillation,
+\method{}, and a joint-training reference. The reference is not treated as an
+upper bound. All share the identical frozen-evaluator protocol.
 
 \textbf{Single-task sanity (learnability).} The learned navigator beats
 random and spatial-uniform selection at small budgets on both environments
@@ -253,9 +255,10 @@ With seqft, selection Jaccard on $T_1$ collapses to $\xx{0.07}$ and action-KL
 drifts by $\xx{XX}$, yet balanced accuracy barely moves at $K{=}4$
 ($\xx{XX}$): redundancy lets the frozen evaluator compensate. At $K{=}1$--$2$
 the compensation weakens and forgetting becomes visible in accuracy
-($\xx{XX}$ at $K{=}1$). \method{} restores behavioral stability and yields the
-best AA / forgetting among CL methods at every budget, approaching joint
-training with only $\xx{512}$ stored states per task.
+($\xx{XX}$ at $K{=}1$). \method{} reduces forgetting relative to sequential
+fine-tuning in the reported settings, but policy-fidelity distillation remains
+competitive or better on several behavior metrics. The joint-training
+comparison is descriptive, not an upper-bound claim.
 
 \begin{table}[t]
 \centering
@@ -275,10 +278,10 @@ seqft            & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} \\
 EWC              & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} \\
 LwF              & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} \\
 Replay           & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} \\
-Distill (unif.)  & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} \\
-\method{} (ours) & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} \\
+Policy-fidelity distill. & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} \\
+\method{} (utility variant) & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} \\
 \midrule
-Joint (upper)    & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} \\
+Joint reference   & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} & \xx{--} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -300,11 +303,14 @@ seqft's selected regions still achieve $\xx{XX}$\% of the counterfactual
 utility of task-time selections despite Jaccard $\xx{0.07}$ --- different
 regions, similar evidence --- while at $K{=}1$ utility drops to $\xx{XX}$\%,
 explaining where accuracy forgetting comes from. (ii) \emph{Utility
-weighting}: replacing $w(s)$ with uniform weights degrades AA by $\xx{XX}$
-and Jaccard by $\xx{XX}$, confirming that protecting high-stakes decisions is
-what matters, not replay volume. (iii) \emph{Memory}: performance saturates
-at $\xx{512}$ states/task ($<\!\xx{1}$\,MB); $\lambda$ trades stability for
-plasticity smoothly (all in supplement).
+weighting}: replacing $w(s)$ with uniform weights changes AA by $\xx{XX}$
+and Jaccard by $\xx{XX}$; this is a descriptive mechanism result, not a
+universal winner claim. The utility ablation shares utility-prioritized
+buffer truncation with the uniform variant, so it isolates distillation-loss
+weighting rather than the full effect of utility-aware memory. (iii)
+\emph{Memory and $\lambda$}: observed trends are reported as
+behavior-fidelity / capability-retention trade-offs and are not universal
+monotonic laws.
 
 \section{Conclusion}
 \label{sec:conclusion}
@@ -313,8 +319,8 @@ Budgeted evidence-acquisition policies forget \emph{where to look} in ways
 current CL evaluation cannot see: redundancy hides behavioral collapse until
 observation budgets tighten. A frozen-evaluator protocol isolates this
 navigation forgetting, counterfactual gain supervises policies without human
-trajectories, and utility-weighted distillation over compressed states
-preserves acquisition behavior at kilobyte cost. Limitations: feature-space
+trajectories, and Utility-Weighted Replay Distillation is a targeted variant
+over compressed states. Limitations: feature-space
 pseudo-regions on the four-task benchmark (no public coordinates), mean
 evidence aggregation, and fixed budgets; query-conditioned and
 dynamic-magnification policies are natural next steps.

@@ -7,6 +7,18 @@
 > 建議把本文件全文貼給新的 paper project，並要求它先輸出「計畫調整 memo」，
 > 經確認後才執行新的實驗。不要只把原始 CSV 或原始 sprint plan 單獨丟過去。
 
+## v0.32 naming and claim override
+
+後續 paper-facing 文字以 `docs/research_contract_v0.292.md` 為準：
+`distill` 是 old-policy / policy-fidelity distillation，`replay` 是
+counterfactual-teacher replay，`ours_uniform` 是 replay + policy distillation
+（uniform loss weight），`ours` 是 Utility-Weighted Replay Distillation
+variant，`joint` 是 joint-training reference 而非 upper bound。`ours` 與
+`ours_uniform` 共用 utility-prioritized buffer truncation，所以 utility
+ablation 只 isolate distillation-loss weighting；不要把 `ours` 寫成全面
+最佳。WP3 未觀察到新任務 own-time degradation 前，使用
+behavior-fidelity / capability-retention trade-off。
+
 ---
 
 ## 0. 給新 Paper Project 的第一條指令
@@ -174,10 +186,11 @@ human trajectory，而是 label-derived counterfactual teacher。
 | `seqft` | 新 task 直接 fine-tune shared navigator |
 | `ewc` | Fisher-weighted parameter regularization |
 | `lwf` | 新 task state 上的 old-policy KL |
-| `replay` | 舊 task teacher states replay |
-| `distill` | 舊 task replay states 上 uniform policy distillation |
-| `ours` | replay target + utility-weighted policy distillation |
-| `joint` | 已見 task 混合重訓，上界 |
+| `replay` | counterfactual-teacher replay |
+| `distill` | old-policy / policy-fidelity distillation |
+| `ours_uniform` | replay + policy distillation（uniform loss weight） |
+| `ours` | Utility-Weighted Replay Distillation（utility-weighted variant） |
+| `joint` | joint-training reference |
 
 `ours` 的 utility weighting：
 
@@ -428,8 +441,9 @@ ours vs seqft paired CI：
    K=1 時差異很小，不能宣稱 universal improvement。
 2. **Memory 128 明顯不足。** K=2 時 memory 128 的 forgetting/Jaccard/KL
    都劣於 memory 512；memory 2048 在 K=2 進一步改善 AA、forgetting、Jaccard。
-3. **λ 是 stability-plasticity trade-off。** λ=3 在 K=2 提高 Jaccard、
-   降低 action-KL，但 forgetting 反而高於 λ=1；不能只用單一 metric 選 λ。
+3. **λ 的結果是 qualified behavior-fidelity / capability-retention
+   trade-off。** λ=3 在部分 K/task 的 own-time accuracy 低於 λ=1，同時
+   提高部分 Jaccard、降低 action-KL；不能宣稱單調或 universal effect。
 4. 這些是 5-seed descriptive results；若要寫「顯著」，仍需對重要 ablation
    做 paired seed-level CI。
 
@@ -495,11 +509,12 @@ ours vs seqft paired CI：
 
 目前較誠實的說法是：
 
-> Utility-weighted policy distillation with replay is a strong forgetting
-> mitigation, with a budget-dependent advantage over uniform weighting;
+> Utility-Weighted Replay Distillation is a targeted forgetting mitigation,
+> with a budget-dependent advantage over uniform weighting;
 > however, uniform policy distillation remains a competitive baseline for
-> behavioral overlap. Memory size and lambda expose a stability--plasticity
-> trade-off rather than a single universally optimal setting.
+> behavioral overlap. Memory size and lambda expose a qualified
+> behavior-fidelity / capability-retention trade-off rather than a single
+> universally optimal setting.
 
 中文意思：
 
@@ -793,7 +808,7 @@ G. Execution plan：
 
 目前不應把 project 描述成：
 
-> 我們已經證明 utility-weighted ours 全面優於所有 CL baseline。
+> （禁止）Utility-Weighted Replay Distillation 全面優於所有 CL baseline。
 
 目前更準確的描述是：
 
@@ -801,8 +816,9 @@ G. Execution plan：
 > 證明 shared navigator 在 sequential tasks 下產生明顯 navigation forgetting，
 > 並觀察到 replay/distillation 類方法能顯著減少 forgetting。
 > Ablation 顯示 utility weighting 的增益依 budget 而變化：K=2 時相對
-> uniform weighting 明顯降低 forgetting，但 K=1 時差異很小；memory size
-> 與 lambda 也呈現 stability--plasticity trade-off。
+> uniform weighting 的差異依 budget 而變化，但 `ours` 不是 universal winner；
+> memory size 與 lambda 的結果應描述為 behavior-fidelity /
+> capability-retention trade-off，並保留 shared-buffer limitation。
 
 這個較保守的版本有三個優點：
 

@@ -210,7 +210,13 @@ CVLN（最完整的一篇）的實驗細節值得記錄：I-CVLN 由 R2R+RxR 的
 
 ### 6.3 差異化主張（可直接用於論文）
 
-> 據我們所知，這是第一個在 WSI 的 feature-space causal pyramid 上研究 navigation 行為之 continual learning 的工作：與既有 continual VLN（scene-domain incremental、幾何 success、GT 軌跡 replay）不同，我們的任務增量改變的是監督信號本身（counterfactual gain teacher），我們證明這導致選區行為的災難性遺忘（selection Jaccard 0.06），並提出不依賴 GT 軌跡的 utility-weighted policy distillation + compressed state replay。
+> 我們將 WSI 的 feature-space causal pyramid 作為一個分析 continual
+> evidence-acquisition behavior 的環境：與既有 continual VLN（scene-domain
+> incremental、幾何 success、GT 軌跡 replay）不同，我們的任務增量改變的是
+> 監督信號本身（counterfactual gain teacher）。結果支持選區行為的遺忘可被
+> frozen-evaluator protocol 量化；Utility-Weighted Replay Distillation 是
+> replay/distillation family 中的 targeted variant，而不是 broad priority
+> claim。
 
 ---
 

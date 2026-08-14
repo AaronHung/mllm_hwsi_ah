@@ -4,6 +4,9 @@ Protocol（凍結）見 docs/protocol.md：
     - dataset=can    ：ESCA → LUNG → RCC → BRCA（fold_1 patient split，pseudo-region 環境）
     - dataset=pilot40：renal → breast（stratified 70/30 per seed，HIPT/CONCH 層級環境）
     - 方法：seqft / ewc / lwf / replay / distill / ours_uniform / ours / joint
+      （paper-facing labels: counterfactual-teacher replay; old-policy /
+      policy-fidelity distillation; Utility-Weighted Replay Distillation;
+      joint-training reference）
     - K ∈ {1,2,4}；seeds {0..4}；指標見 protocol §4
 
 用法：

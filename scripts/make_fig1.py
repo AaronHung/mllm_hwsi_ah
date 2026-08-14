@@ -2,8 +2,9 @@
 
 兩個 panel：
   (a) 單一 episode：causal feature pyramid 上的 budgeted evidence acquisition。
-  (b) 任務序列下的 continual learning：compressed state replay + utility-weighted
-      policy distillation（凍結 per-task evaluator 的 navigation-only 歸因）。
+  (b) 任務序列下的 continual learning：counterfactual-teacher replay +
+      Utility-Weighted Replay Distillation（凍結 per-task evaluator 的
+      navigation-only 歸因）。
 """
 
 from __future__ import annotations
@@ -144,7 +145,7 @@ def panel_b(ax):
         "$(F_{low}, E_t, b_t, \\mathrm{gain}, u)$ — no raw images",
         C_CL, C_CL_E, fs=8)
     box(ax, 5.15, 1.5, 4.55, 1.9,
-        "Utility-weighted policy distillation\n"
+        "Utility-Weighted Replay Distillation\n"
         "$\\lambda \\sum_{s \\in \\mathcal{M}} w(s)\\,"
         "\\mathrm{KL}(\\pi_\\theta \\| \\pi_{old})$\n"
         "$w(s) \\propto u(s) = \\max_r \\mathrm{gain}(r|E_s)$",

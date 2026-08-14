@@ -8,7 +8,7 @@ seqft            0.722         0.722       0.000   0.722            0.021       
 ```
 
 - `seqft` = Gate 2 sequential fine-tuning baseline
-- `distill` = Gate 3 utility-weighted policy distillation + state replay
+- `distill` = old-policy / policy-fidelity distillation on compressed states
 - evaluator 凍結（navigation-only protocol），T1 掉分只可能來自導航行為改變
 
 **Gate 2（觀察到 navigation forgetting）：seqft forgetting = +0.000 → WEAK/FAIL**

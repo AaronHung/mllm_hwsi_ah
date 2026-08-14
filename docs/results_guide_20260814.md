@@ -14,6 +14,23 @@ Repository：`AaronHung/mllm_hwsi_ah`
   → 最後才看逐 seed CSV 與 implementation
 ```
 
+## v0.32 paper-facing override
+
+本導讀的舊段落保留為結果 provenance；自 v0.32 起，方法名稱與 claim
+以 `docs/research_contract_v0.292.md` 為準：
+
+- `distill` = old-policy / policy-fidelity distillation；
+- `replay` = counterfactual-teacher replay；
+- `ours_uniform` = replay + policy distillation（uniform loss weight）；
+- `ours` = Utility-Weighted Replay Distillation，一個 utility-weighted
+  variant，不是 universal winner；
+- `joint` = joint-training reference，不是 upper bound。
+
+`ours` 與 `ours_uniform` 共用 utility-prioritized buffer truncation，因此
+utility ablation 只 isolate distillation-loss weighting。WP3 只有在
+own-time 新任務 accuracy 出現明確下降時，才使用 stability–plasticity；
+否則使用 behavior-fidelity / capability-retention trade-off。
+
 ---
 
 ## 1. 一頁結論
@@ -32,9 +49,10 @@ Repository：`AaronHung/mllm_hwsi_ah`
    `ours` 的優勢較集中在 forgetting，以及部分 K=4 / memory / utility setting。
 5. **Utility weighting 是 budget-dependent refinement，不是已證明的 universal winner。**
    K=2 相對 uniform weighting 有明顯 descriptive gain；K=1 差異很小。
-6. **Memory size 與 λ 有 stability–plasticity trade-off。**
-   memory 128 明顯不足；memory 2048 在 K=2 表現較好；
-   λ=3 改善 Jaccard/KL，但不一定改善 forgetting。
+6. **Memory size 與 λ 呈現 qualified behavior-fidelity /
+   capability-retention trade-off。** memory 128 明顯不足；memory 2048 在
+   K=2 表現較好；WP3 只在部分 matched task×K cells 觀察到 λ=3 的 own-time
+   accuracy degradation。
 
 ### 1.2 目前不能宣稱
 
@@ -428,7 +446,9 @@ K=2：
 解讀：
 
 - λ 越大，behavior preservation（Jaccard/KL）傾向較強。
-- λ=3 的 forgetting 反而較高，顯示 stability–plasticity trade-off。
+- λ=3 的 forgetting 反而較高；WP3 的 own-time 結果只支持 qualified
+  behavior-fidelity / capability-retention trade-off，不支持 universal
+  monotonic effect。
 - 不能只用 Jaccard 選 λ，也不能只用 forgetting 選 λ。
 
 ---
@@ -511,7 +531,7 @@ is a strong baseline for Jaccard and action-KL.
 目前不要直接再擴張 experiment matrix。建議：
 
 1. 對 main/reverse/ablation 的關鍵差異做 paired seed-level CI。
-2. 審計 `distill-only`、`ours_uniform`、`ours` 的 loss / update / buffer fairness。
+2. 審計 `distill`、`ours_uniform`、`ours` 的 loss / update / buffer fairness。
 3. 決定 `ours` 是否保留為 main method。
 4. 若需要外部 generalization，再跑 pilot40 的最小四方法：
 

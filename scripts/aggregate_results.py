@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from nav import add_device_argument  # noqa: E402
+from nav.method_labels import method_label  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
@@ -100,7 +101,7 @@ def main():
             g = sub[sub.method == m]
             def ms(col):
                 return f"{g[col].mean():.3f} ± {g[col].std():.3f}"
-            lines.append(f"| {m} | {ms('AA')} | {ms('forgetting')} | {ms('BWT')} "
+            lines.append(f"| `{m}` — {method_label(m)} | {ms('AA')} | {ms('forgetting')} | {ms('BWT')} "
                          f"| {ms('jaccard')} | {ms('action_kl')} | {ms('sel_utility')} |")
         # paired CI：ours vs seqft
         if {"ours", "seqft"} <= set(sub.method.unique()):
@@ -110,7 +111,7 @@ def main():
                 for col, better in [("AA", "higher"), ("forgetting", "lower"),
                                     ("jaccard", "higher")]:
                     m_, lo, hi = boot_ci_paired(a[col].values, b[col].values)
-                    lines.append(f"\n- ours − seqft（{col}，{better} better）："
+                    lines.append(f"\n- `{method_label('ours')}` − `{method_label('seqft')}`（{col}，{better} better）："
                                  f"{m_:+.3f}，95% CI [{lo:+.3f}, {hi:+.3f}]")
     output_dir.mkdir(parents=True, exist_ok=True)
     out_md = output_dir / f"main_table_{args.dataset}_{args.order}.md"
@@ -136,7 +137,7 @@ def main():
             mean, std = g[col].mean(), g[col].std()
             ls = "--" if m == "joint" else "-o"
             ax.plot(mean.index, mean.values, ls, color=colors.get(m, None),
-                    label=m, lw=1.8, ms=4)
+                    label=method_label(m), lw=1.8, ms=4)
             ax.fill_between(mean.index, mean - std, mean + std,
                             color=colors.get(m, None), alpha=0.10)
     for ax, (col, ylab) in zip(axes, [("forgetting", "forgetting (bal. acc) ↓"),
@@ -166,7 +167,7 @@ def main():
         std = [sub[sub.method == m][col].std() for m in ms]
         ax.bar(x, mean, yerr=std, capsize=4,
                color=[colors.get(m) for m in ms], alpha=0.8)
-        ax.set_xticks(x, ms, rotation=20)
+        ax.set_xticks(x, [method_label(m) for m in ms], rotation=20)
         ax.set_ylabel(ylab)
         ax.grid(axis="y", alpha=0.25)
     fig.suptitle(f"Behavior-level preservation @ K={kmin} — "

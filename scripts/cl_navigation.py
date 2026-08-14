@@ -11,8 +11,8 @@ Navigation-only protocol（把遺忘歸因到「導航」而非「分類」）�
 
 方法：
     seqft   : Gate 2 baseline，T2 直接 fine-tune 同一個 navigator。
-    distill : Gate 3，T2 訓練時加 utility-weighted policy distillation +
-              compressed navigation-state replay（每張 T1 訓練切片存少量教師 state）。
+    distill : old-policy / policy-fidelity distillation on compressed
+              navigation-state replay（legacy two-task probe）。
 
 量測（都在 T1 test 上）：
     - acc_before / acc_after / forgetting = before - after
@@ -199,7 +199,7 @@ def main():
         summary = ["# Gate 2/3 — navigation forgetting 與緩解（K=%d）" % args.k, "",
                    "```", agg.round(3).to_string(), "```", "",
                    "- `seqft` = Gate 2 sequential fine-tuning baseline",
-                   "- `distill` = Gate 3 utility-weighted policy distillation + state replay",
+                   "- `distill` = old-policy / policy-fidelity distillation on compressed state replay",
                    "- evaluator 凍結（navigation-only protocol），T1 掉分只可能來自導航行為改變",
                    ""]
         f_seq = agg.loc["seqft", "forgetting"]

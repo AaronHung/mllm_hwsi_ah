@@ -127,14 +127,17 @@ t=K   evaluator f(E_K) 輸出診斷；episode 結束
   舊任務表現的任何變化**只可能來自 navigator 行為改變**——這是我們量測 navigation forgetting 的 protocol 核心。
 - **How**：`train_evaluator()` 以 random K-子集證據作 augmentation 訓練；此後只做 inference。
 
-### 2.6 CL 機制（本文提出的保存方法）
+### 2.6 CL 機制（paper-facing method labels）
 
-- **What**：學新任務時，(a) 從每張舊任務訓練 slide 保留 m 個 teacher state（compressed replay），
-  (b) 在這些 state 上做 **utility-weighted policy distillation**：新 policy 對舊 policy 的 KL，
+- **What**：學新任務時，(a) 從每張舊任務訓練 slide 保留 m 個 teacher state（compressed
+  counterfactual-teacher replay），(b) 在這些 state 上做 **policy-fidelity
+  distillation**：新 policy 對舊 policy 的 KL，
   以該 state 的診斷效用 u(s)=max_r gain(r|E) 加權——診斷價值高的取證行為被優先保護。
 - **Why**：要保的不是「分類 logits」而是「取證行為」；且不是所有舊行為都值得保
   （很多 state 的 gain 平坦＝去哪都行），utility weighting 把保存預算集中在真正 task-specific 的決策點上。
-  這是對「該保什麼」的方法性回答，消融（uniform vs utility）直接驗證。
+  這是對「該保什麼」的方法性回答；`ours` 與 `ours_uniform` 共用
+  utility-prioritized buffer truncation，因此消融只 isolate distillation
+  loss 的 utility weighting，而非完整 utility-aware memory。
 - **How**：`train_navigator(distill=(old_nav, replay_states, λ))`；
   buffer 只存壓縮向量，單一 state < 1 MB，隱私與儲存成本可控（不存 raw WSI）。
 
@@ -165,7 +168,8 @@ for t = 1..n:
 ```
 
 超參數（protocol 凍結版，詳見 `docs/protocol.md`）：τ=0.05、λ=1.0、
-evaluator 60 epochs（Adam 1e-3, wd 1e-4）、navigator 30 epochs（Adam 1e-3）、
+can evaluator 30 epochs（Adam 1e-3, wd 1e-4）、can navigator 10 epochs（Adam 1e-3）；
+pilot40 仍為 evaluator 60 / navigator 30、
 replay 每張舊 slide 2 個 state。
 
 ---
@@ -199,8 +203,9 @@ $$\mathcal{L} = \underbrace{\mathcal{L}_{\mathrm{nav}}^{(\mathrm{new})}}_{\text{
 - 第二項 constrain：在**舊任務的決策 state** 上，新 policy 的行動分佈不得偏離舊 policy——
   保的是 evidence-selection behavior 本身；utility 權重讓「高診斷價值的決策點」獲得更強保護，
   「怎麼選都行」的 state 幾乎不佔用保存能力。
-- λ 控制 stability–plasticity trade-off：λ→0 退化為 seqft；λ→∞ 凍結舊行為、犧牲新任務。
-  λ 敏感度屬 ablation 必跑項。
+- λ controls the behavior-fidelity / capability-retention balance; λ→0
+  退化為 seqft，較大 λ 傾向保留舊 policy。只有在 own-time new-task
+  accuracy 出現下降時，才使用 stability–plasticity 這個更強的名稱。
 
 ### 4.4 對照方法的 loss（main table 用）
 
@@ -210,9 +215,11 @@ $$\mathcal{L} = \underbrace{\mathcal{L}_{\mathrm{nav}}^{(\mathrm{new})}}_{\text{
 | EWC | $\lambda \sum_i F_i (\theta_i - \theta^{old}_i)^2$（Fisher 由 L_nav 梯度估計） | Fisher + θ_old | 參數空間正則 baseline |
 | LwF-style | KL(π_new‖π_old) 於**新任務** states | 無（rehearsal-free） | 行為正則 baseline |
 | replay-only | 舊 teacher states 上重放 $\mathcal{L}_{\mathrm{nav}}$（對舊 gain target） | buffer M | 消融：只有資料重放 |
-| distill-only | 同 4.3 第二項但 w(s)=1 | buffer M | 消融：無 utility 加權 |
-| **ours** | 4.3 完整（replay target + utility-weighted distill） | buffer M | 提出方法 |
-| joint | 全任務混訓 | 全部 | 上界 |
+| distill | 同 4.3 第二項但 w(s)=1 | buffer M | old-policy / policy-fidelity distillation |
+| replay | 舊 teacher gain target 重放 | buffer M | counterfactual-teacher replay |
+| **ours_uniform** | replay target + policy distillation，w(s)=1 | buffer M | uniform loss-weight reference |
+| **ours** | replay target + utility-weighted distill | buffer M | Utility-Weighted Replay Distillation variant |
+| joint | 全任務混訓 | 全部 | joint-training reference |
 
 ---
 

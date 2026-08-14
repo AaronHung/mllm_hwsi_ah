@@ -66,9 +66,9 @@ seqft 學完新任務後，回頭看舊任務：
 
 ---
 
-## 5. 提出方法：UPD-R
+## 5. 分析 variant：Utility-Weighted Replay Distillation
 
-**Utility-weighted Policy Distillation + compressed state Replay**
+**Utility-Weighted Replay Distillation (a targeted variant)**
 
 $$\mathcal{L} = \mathcal{L}_{\text{nav}}^{\text{new}} + \sum_{s\in\mathcal{M}}\Big[\text{KL}(q_s\|\pi_\theta) + \lambda\, w(s)\,\text{KL}(\pi_\theta\|\pi_{\text{old}})\Big]$$
 
@@ -85,7 +85,9 @@ $$\mathcal{L} = \mathcal{L}_{\text{nav}}^{\text{new}} + \sum_{s\in\mathcal{M}}\B
   - patient-level split 固定；**兩個任務順序**都跑
 - **第二資料**：pilot40 層級環境（HIPT 低倍 / CONCH 高倍，真空間 region）
 - K ∈ {1,2,4}；5 seeds；balanced accuracy
-- 方法：seqft / EWC / LwF / replay / distill / **UPD-R** / joint 上限
+- 方法：seqft / EWC / LwF / counterfactual-teacher replay /
+  old-policy distillation / **Utility-Weighted Replay Distillation** /
+  joint-training reference
 - 指標：AA、Forgetting、BWT ＋ **Jaccard、action-KL、selected utility**（行為層）
 
 ---
@@ -106,11 +108,12 @@ $$\mathcal{L} = \mathcal{L}_{\text{nav}}^{\text{new}} + \sum_{s\in\mathcal{M}}\B
 | seqft | XX | XX | XX |
 | EWC / LwF | XX | XX | XX |
 | replay / distill | XX | XX | XX |
-| **UPD-R (ours)** | **XX** | **XX** | **XX** |
-| joint（上限） | XX | — | — |
+| **Utility-Weighted Replay Distillation (variant)** | **XX** | **XX** | **XX** |
+| joint-training reference | XX | — | — |
 
 - K=4：Jaccard 崩但 accuracy 撐住（**冗餘補償**）
-- K=1–2：補償失效，seqft 效能遺忘顯形；UPD-R 恢復 **XX%** gap
+- K=1–2：補償失效，seqft 效能遺忘顯形；各 replay/distillation variant
+  的相對效果依 budget 與 order 而變
 - （圖：figures/cl_budget_forgetting_can_main.png）
 
 ---
@@ -120,7 +123,8 @@ $$\mathcal{L} = \mathcal{L}_{\text{nav}}^{\text{new}} + \sum_{s\in\mathcal{M}}\B
 1. **冗餘掩蓋的直接證據**：seqft 選區 Jaccard=XX 但 selected utility 仍達教師的 XX%（K=4）；K=1 時 utility 掉到 XX% → 效能遺忘來源
 2. **utility weighting 的貢獻**：uniform 權重 → AA −XX、Jaccard −XX
 3. **記憶體效率**：512 states/task（<1MB）已飽和
-4. **λ 敏感度**：stability–plasticity 平滑 trade-off
+4. **λ 敏感度**：qualified behavior-fidelity / capability-retention
+   trade-off；只有 own-time degradation 支持時才升級命名
 
 ---
 

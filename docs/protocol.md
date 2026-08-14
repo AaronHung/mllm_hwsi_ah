@@ -50,10 +50,11 @@
 | `seqft` | 新任務直接 fine-tune 共享 navigator | — |
 | `ewc` | + Fisher 正則（Fisher 由模仿 loss 梯度平方估計，任務結束時計算） | λ_ewc 由 T1→T2 val 掃 {10,100,1000} 選定後凍結 |
 | `lwf` | + KL(π_new‖π_old)，計算於**新任務** states（無 buffer） | λ 同 ours |
-| `replay` | + 舊任務 teacher states 重放（對舊 gain target 的模仿 loss） | buffer 同 ours |
-| `distill` | + KL(π_new‖π_old) 於 buffer states，**uniform 權重** | λ、buffer 同 ours |
-| `ours` | + utility-weighted distillation + replay target（完整方法） | λ=1.0、τ=0.05 |
-| `joint` | 全部已見任務混合重訓（上界，非 CL 方法） | — |
+| `replay` | + counterfactual-teacher replay（對舊 gain target 的模仿 loss） | buffer 同 `ours` |
+| `distill` | + old-policy / policy-fidelity distillation，於 buffer states 使用 uniform 權重 | λ、buffer 同 `ours` |
+| `ours_uniform` | replay + policy distillation，uniform loss weight | λ=1.0、buffer cap=512 |
+| `ours` | Utility-Weighted Replay Distillation（utility-weighted variant） | λ=1.0、τ=0.05 |
+| `joint` | joint-training reference：全部已見任務混合重訓 | — |
 
 - **Replay buffer**：每張舊任務訓練 slide 存前 2 個 teacher steps；每個舊任務 cap 512 states
   （超出時取 utility 最高者）。ablation 掃 buffer size ∈ {128, 512, 2048}。
@@ -72,17 +73,22 @@
 | `forgetting(j)` | max_{t'≥j} bal_acc(j, t') − bal_acc(j, n) |
 | `BWT` | (1/(n−1))·Σ_{j<n} [bal_acc(j, n) − bal_acc(j, j)] |
 | `jaccard(j)` | T_j test 每張 slide：t=j 當下所選 region 集合 vs 序列結束所選集合的 Jaccard，取平均 |
-| `action_kl(j)` | 固定 probe states（t=j 當下 T_j test 的 teacher states）上 KL(π_final‖π_{t=j}) |
+| `action_kl(j)` | 固定 probe states（t=j 當下 T_j test 的 teacher states）上 KL(π_{t=j}‖π_final) |
 | `sel_utility(j)` | 序列結束時所選 region 在 f_j 下的平均 counterfactual gain |
 | `random_ref(j)` | random policy 在 f_j 下的 bal_acc（5 抽樣平均，遺忘的地板參考） |
 
 ## 5. 統計分析（凍結）
 
-- 主表報 5 seeds 的 mean ± std；關鍵比較（ours vs seqft、ours vs distill）另報
-  **paired bootstrap 95% CI**（以 seed × task 為配對單位，10,000 次重抽）。
+- 主表報 5 seeds 的 mean ± std；v0.292 的關鍵比較另報
+  **paired seed-level bootstrap 95% CI**（每個 seed 的 per-run metric
+  aggregate 作為配對單位，10,000 次重抽），輸出見
+  `results/paired_stats_pack.md`。
 - Gate 1 加固：5 seeds × 5 folds，learned−random 與 learned−uniform 的
   per-fold paired difference + bootstrap 95% CI + Wilcoxon signed-rank test。
 - 顯著性聲明一律基於 CI 不跨 0；std 陰影不作顯著性宣稱（pilot 報告的教訓）。
+- WP1 全部 comparison × order × K × metric hypotheses 使用同一個
+  Benjamini–Hochberg FDR policy（q=0.05）；未調整的 CI 只作 descriptive
+  evidence。
 
 ## 6. 輸出格式（凍結）
 
@@ -106,6 +112,9 @@
 ## 8. 版本記錄
 
 - v1（2026-08-14）：初版凍結。
+- v0.32/v0.292（2026-08-15）：只更新 paper-facing method labels、
+  action-KL 方向的文字以匹配 `nav.cl.kl_drift`，並加入執行契約；
+  不改 Protocol-v1 的資料、模型、seed、budget 或 evaluator 定義。
 
 ## 9. Infrastructure v2 addendum（不改變 Protocol-v1 科學定義）
 
@@ -124,3 +133,19 @@
 - **Recovery:** a checkpoint records completed `(seed, method, K)` units after
   their CSV rows are flushed. Reattach and rerun with `--resume`; completed
   units are skipped and an interrupted unit is recomputed from its boundary.
+
+## 10. Direction freeze v0.32 / research contract v0.292
+
+論文方向定版為 **Continual Budgeted Evidence Acquisition**。本 repo 的
+v0.292 執行契約見 `docs/research_contract_v0.292.md`；它只允許 WP1 paired
+stats、WP2 implementation audit、WP3 own-time plasticity、WP4 K=1 mechanism
+probe，以及被 gate 的最小 pilot40 validation。
+
+- 不實作 EUP、新 CL loss 或 query conditioning。
+- 不重跑已完成的 Protocol-v1 main/reverse/ablation grids。
+- `ours` 不稱全面最佳；`joint` 不稱 upper bound。
+- utility ablation 的 limitation 是 `ours` 與 `ours_uniform` 共用
+  utility-prioritized buffer truncation，因此只 isolate distillation loss
+  的 utility weighting。
+- 一個 results table 的所有 seeds 必須使用同一 backend；新 compute 一律
+  透過 `--device auto`。

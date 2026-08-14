@@ -31,13 +31,14 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "scripts"))
 from nav import add_device_argument  # noqa: E402
+from nav.method_labels import method_label  # noqa: E402
 from aggregate_results import per_run_metrics  # noqa: E402
 
 RESULTS = REPO / "results"
 FIGURES = REPO / "figures"
 
 ABLATION_LABELS = {
-    "ablA1": "uniform utility weight (ours_uniform)",
+    "ablA1": method_label("ours_uniform"),
     "ablA2a": "memory cap 128",
     "ablA2b": "memory cap 2048",
     "ablA3a": "lambda 0.3",
@@ -102,8 +103,8 @@ def write_markdown(run: pd.DataFrame, output_dir: Path = RESULTS) -> None:
                 continue
             row = s.loc[key]
             label = {
-                "distill_main": "distill baseline",
-                "ours_main": "ours (memory 512, λ=1)",
+                "distill_main": method_label("distill"),
+                "ours_main": f"{method_label('ours')} (memory 512, λ=1)",
                 **ABLATION_LABELS,
             }[tag]
             lines.append(
@@ -122,6 +123,8 @@ def write_markdown(run: pd.DataFrame, output_dir: Path = RESULTS) -> None:
             "- `ablA2a` / `ablA2b` test memory caps 128 / 2048.",
             "- `ablA3a` / `ablA3b` test λ=0.3 / 3.0.",
             "- `distill baseline` is the main-grid distill-only baseline; it is not identical to `ablA1`.",
+            "- `ours` and `ours_uniform` share utility-prioritized buffer truncation; "
+            "this ablation isolates distillation-loss weighting, not full memory utility.",
             "",
         ]
     )

@@ -1,0 +1,185 @@
+order,setting_key,setting_label,K,task,A_t_t,std,n,raw_acc
+main,distill,old-policy / policy-fidelity distillation,1,brca,0.8283200000000001,0.055173925000855314,5,0.90108
+main,distill,old-policy / policy-fidelity distillation,1,esca,0.89822,0.03604118477519851,5,0.89334
+main,distill,old-policy / policy-fidelity distillation,1,lung,0.85746,0.019457209460762872,5,0.8547399999999999
+main,distill,old-policy / policy-fidelity distillation,1,rcc,0.9566399999999999,0.010238798757666853,5,0.95264
+main,ewc,EWC parameter regularization,1,brca,0.8755200000000001,0.08549618120126769,5,0.9139800000000001
+main,ewc,EWC parameter regularization,1,esca,0.89822,0.03604118477519851,5,0.89334
+main,ewc,EWC parameter regularization,1,lung,0.87544,0.015148696313544636,5,0.87368
+main,ewc,EWC parameter regularization,1,rcc,0.9434799999999999,0.021417329432027708,5,0.9421200000000001
+main,joint,joint-training reference,1,brca,0.8466799999999999,0.09707418297364134,5,0.9053599999999999
+main,joint,joint-training reference,1,esca,0.89822,0.03604118477519851,5,0.89334
+main,joint,joint-training reference,1,lung,0.8678000000000001,0.003995622604801436,5,0.8653000000000001
+main,joint,joint-training reference,1,rcc,0.97552,0.013684736022298707,5,0.9684000000000001
+main,lwf,new-state old-policy distillation,1,brca,0.8626000000000001,0.028426660021887953,5,0.91828
+main,lwf,new-state old-policy distillation,1,esca,0.89822,0.03604118477519851,5,0.89334
+main,lwf,new-state old-policy distillation,1,lung,0.8676600000000001,0.011750446800015713,5,0.8652599999999999
+main,lwf,new-state old-policy distillation,1,rcc,0.95052,0.009750487167316312,5,0.94474
+main,ours_lambda0.3,Utility-Weighted Replay Distillation (λ=0.3),1,brca,0.84276,0.05313217480961983,5,0.9053799999999999
+main,ours_lambda0.3,Utility-Weighted Replay Distillation (λ=0.3),1,esca,0.89822,0.03604118477519851,5,0.89334
+main,ours_lambda0.3,Utility-Weighted Replay Distillation (λ=0.3),1,lung,0.8739399999999999,0.008087521251904059,5,0.8715999999999999
+main,ours_lambda0.3,Utility-Weighted Replay Distillation (λ=0.3),1,rcc,0.94886,0.012999346137402482,5,0.94474
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),1,brca,0.82168,0.08579616541547758,5,0.89678
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),1,esca,0.89822,0.03604118477519851,5,0.89334
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),1,lung,0.8676600000000001,0.00850517489532111,5,0.8652799999999999
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),1,rcc,0.9525600000000001,0.015216701350818458,5,0.9473800000000001
+main,ours_lambda3,Utility-Weighted Replay Distillation (λ=3.0),1,brca,0.84666,0.056511441319435474,5,0.9053799999999999
+main,ours_lambda3,Utility-Weighted Replay Distillation (λ=3.0),1,esca,0.89822,0.03604118477519851,5,0.89334
+main,ours_lambda3,Utility-Weighted Replay Distillation (λ=3.0),1,lung,0.87418,0.01513941874709855,5,0.87158
+main,ours_lambda3,Utility-Weighted Replay Distillation (λ=3.0),1,rcc,0.95996,0.009259751616539259,5,0.95264
+main,replay,counterfactual-teacher replay,1,brca,0.8349399999999999,0.07893480221043185,5,0.9053799999999999
+main,replay,counterfactual-teacher replay,1,esca,0.89822,0.03604118477519851,5,0.89334
+main,replay,counterfactual-teacher replay,1,lung,0.86764,0.01823452768787828,5,0.86524
+main,replay,counterfactual-teacher replay,1,rcc,0.95332,0.013253376928164369,5,0.9526199999999999
+main,seqft,sequential fine-tuning,1,brca,0.8716200000000001,0.05748401516943638,5,0.91396
+main,seqft,sequential fine-tuning,1,esca,0.89822,0.03604118477519851,5,0.89334
+main,seqft,sequential fine-tuning,1,lung,0.87382,0.008237839522593287,5,0.8715999999999999
+main,seqft,sequential fine-tuning,1,rcc,0.9545999999999999,0.02161099257322532,5,0.95
+main,distill,old-policy / policy-fidelity distillation,2,brca,0.8823000000000001,0.04719952330267752,5,0.92472
+main,distill,old-policy / policy-fidelity distillation,2,esca,0.95,0.027950849718747377,5,0.94664
+main,distill,old-policy / policy-fidelity distillation,2,lung,0.8614,0.01985736639134203,5,0.8589600000000001
+main,distill,old-policy / policy-fidelity distillation,2,rcc,0.95868,0.016431737583104296,5,0.95526
+main,ewc,EWC parameter regularization,2,brca,0.8861800000000001,0.048047861554912086,5,0.92472
+main,ewc,EWC parameter regularization,2,esca,0.95,0.027950849718747377,5,0.94664
+main,ewc,EWC parameter regularization,2,lung,0.86266,0.012134578690667402,5,0.86108
+main,ewc,EWC parameter regularization,2,rcc,0.9422,0.036334143721849295,5,0.94474
+main,joint,joint-training reference,2,brca,0.88608,0.030171708602596586,5,0.9182600000000001
+main,joint,joint-training reference,2,esca,0.95,0.027950849718747377,5,0.94664
+main,joint,joint-training reference,2,lung,0.8558600000000001,0.011797584498531901,5,0.85472
+main,joint,joint-training reference,2,rcc,0.9545999999999999,0.011825819210524034,5,0.95
+main,lwf,new-state old-policy distillation,2,brca,0.87704,0.05451534646317496,5,0.92258
+main,lwf,new-state old-policy distillation,2,esca,0.95,0.027950849718747377,5,0.94664
+main,lwf,new-state old-policy distillation,2,lung,0.8755599999999999,0.023784301545347074,5,0.8737
+main,lwf,new-state old-policy distillation,2,rcc,0.9611000000000001,0.010200000000000032,5,0.96054
+main,ours_lambda0.3,Utility-Weighted Replay Distillation (λ=0.3),2,brca,0.87704,0.06584187877027813,5,0.92256
+main,ours_lambda0.3,Utility-Weighted Replay Distillation (λ=0.3),2,esca,0.95,0.027950849718747377,5,0.94664
+main,ours_lambda0.3,Utility-Weighted Replay Distillation (λ=0.3),2,lung,0.85296,0.020304014381397582,5,0.85054
+main,ours_lambda0.3,Utility-Weighted Replay Distillation (λ=0.3),2,rcc,0.9574,0.011408768557561356,5,0.9578800000000001
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),2,brca,0.8809400000000001,0.06813855736658943,5,0.92256
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),2,esca,0.95,0.027950849718747377,5,0.94664
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),2,lung,0.8506600000000001,0.005788609504881119,5,0.8484
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),2,rcc,0.95906,0.011173540173105442,5,0.95792
+main,ours_lambda3,Utility-Weighted Replay Distillation (λ=3.0),2,brca,0.8928,0.044840550844074144,5,0.9290200000000001
+main,ours_lambda3,Utility-Weighted Replay Distillation (λ=3.0),2,esca,0.95,0.027950849718747377,5,0.94664
+main,ours_lambda3,Utility-Weighted Replay Distillation (λ=3.0),2,lung,0.8468600000000001,0.024897349256497125,5,0.84422
+main,ours_lambda3,Utility-Weighted Replay Distillation (λ=3.0),2,rcc,0.95868,0.011118992760137962,5,0.95526
+main,replay,counterfactual-teacher replay,2,brca,0.8875400000000001,0.0783949169270559,5,0.92688
+main,replay,counterfactual-teacher replay,2,esca,0.95,0.027950849718747377,5,0.94664
+main,replay,counterfactual-teacher replay,2,lung,0.84886,0.013617195012189554,5,0.8463200000000001
+main,replay,counterfactual-teacher replay,2,rcc,0.97258,0.010508425191245377,5,0.97104
+main,seqft,sequential fine-tuning,2,brca,0.86122,0.06367230167034953,5,0.91612
+main,seqft,sequential fine-tuning,2,esca,0.95,0.027950849718747377,5,0.94664
+main,seqft,sequential fine-tuning,2,lung,0.87774,0.017474495700877883,5,0.87578
+main,seqft,sequential fine-tuning,2,rcc,0.9648,0.00883968325224386,5,0.96316
+main,distill,old-policy / policy-fidelity distillation,4,brca,0.8924,0.008496469855181066,5,0.90966
+main,distill,old-policy / policy-fidelity distillation,4,esca,0.89642,0.0382061120764728,5,0.89334
+main,distill,old-policy / policy-fidelity distillation,4,lung,0.85678,0.0228019078149176,5,0.8547399999999999
+main,distill,old-policy / policy-fidelity distillation,4,rcc,0.95128,0.011721859920678108,5,0.95
+main,ewc,EWC parameter regularization,4,brca,0.8149200000000001,0.12790444480157834,5,0.88604
+main,ewc,EWC parameter regularization,4,esca,0.89642,0.0382061120764728,5,0.89334
+main,ewc,EWC parameter regularization,4,lung,0.8627800000000001,0.01081605288448613,5,0.86104
+main,ewc,EWC parameter regularization,4,rcc,0.93312,0.020338928192016395,5,0.93948
+main,joint,joint-training reference,4,brca,0.82842,0.06529951760924425,5,0.9075200000000001
+main,joint,joint-training reference,4,esca,0.89642,0.0382061120764728,5,0.89334
+main,joint,joint-training reference,4,lung,0.8430799999999999,0.019523626712268347,5,0.8421200000000001
+main,joint,joint-training reference,4,rcc,0.9453400000000001,0.02400651994771421,5,0.9552799999999999
+main,lwf,new-state old-policy distillation,4,brca,0.85434,0.11330349950464905,5,0.89892
+main,lwf,new-state old-policy distillation,4,esca,0.89642,0.0382061120764728,5,0.89334
+main,lwf,new-state old-policy distillation,4,lung,0.8577400000000001,0.028187993898112,5,0.85684
+main,lwf,new-state old-policy distillation,4,rcc,0.9577600000000001,0.013891292236505544,5,0.96052
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),4,brca,0.88742,0.015299901960470244,5,0.92042
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),4,esca,0.89642,0.0382061120764728,5,0.89334
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),4,lung,0.85296,0.01515364642586069,5,0.85052
+main,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),4,rcc,0.9372,0.0312679548419784,5,0.9447599999999999
+main,replay,counterfactual-teacher replay,4,brca,0.88338,0.046305582816761955,5,0.9139799999999999
+main,replay,counterfactual-teacher replay,4,esca,0.89642,0.0382061120764728,5,0.89334
+main,replay,counterfactual-teacher replay,4,lung,0.8433400000000001,0.0419463705223706,5,0.8420799999999999
+main,replay,counterfactual-teacher replay,4,rcc,0.9372,0.04297353836955947,5,0.94474
+main,seqft,sequential fine-tuning,4,brca,0.8635200000000001,0.08557459903499405,5,0.90108
+main,seqft,sequential fine-tuning,4,esca,0.89642,0.0382061120764728,5,0.89334
+main,seqft,sequential fine-tuning,4,lung,0.86182,0.011463289231280857,5,0.8589600000000001
+main,seqft,sequential fine-tuning,4,rcc,0.94962,0.010508425191245323,5,0.95
+reverse,distill,old-policy / policy-fidelity distillation,1,brca,0.89538,0.05306512037110628,5,0.92688
+reverse,distill,old-policy / policy-fidelity distillation,1,esca,0.9357199999999999,0.047403501980339,5,0.9333199999999999
+reverse,distill,old-policy / policy-fidelity distillation,1,lung,0.861,0.025634156900510702,5,0.8589600000000001
+reverse,distill,old-policy / policy-fidelity distillation,1,rcc,0.95868,0.01111899276013797,5,0.95526
+reverse,ewc,EWC parameter regularization,1,brca,0.89538,0.05306512037110628,5,0.92688
+reverse,ewc,EWC parameter regularization,1,esca,0.90894,0.03910739060586883,5,0.9066600000000001
+reverse,ewc,EWC parameter regularization,1,lung,0.86484,0.016466724021492553,5,0.86316
+reverse,ewc,EWC parameter regularization,1,rcc,0.9542200000000001,0.028703954431401967,5,0.9473600000000001
+reverse,joint,joint-training reference,1,brca,0.89538,0.05306512037110628,5,0.92688
+reverse,joint,joint-training reference,1,esca,0.975,0.03423265984407289,5,0.97332
+reverse,joint,joint-training reference,1,lung,0.8777200000000001,0.00895862712696541,5,0.8757999999999999
+reverse,joint,joint-training reference,1,rcc,0.95996,0.01446246866893757,5,0.95264
+reverse,lwf,new-state old-policy distillation,1,brca,0.89538,0.05306512037110628,5,0.92688
+reverse,lwf,new-state old-policy distillation,1,esca,0.9625,0.03423265984407288,5,0.95998
+reverse,lwf,new-state old-policy distillation,1,lung,0.88208,0.009328022298429588,5,0.8800000000000001
+reverse,lwf,new-state old-policy distillation,1,rcc,0.9722,0.012821271387814862,5,0.9684200000000001
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),1,brca,0.89538,0.05306512037110628,5,0.92688
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),1,esca,0.9482199999999998,0.055533476390372004,5,0.94666
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),1,lung,0.85436,0.020606382506398326,5,0.8526400000000001
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),1,rcc,0.9623799999999999,0.02376135518020807,5,0.9579000000000001
+reverse,replay,counterfactual-teacher replay,1,brca,0.89538,0.05306512037110628,5,0.92688
+reverse,replay,counterfactual-teacher replay,1,esca,0.9357199999999999,0.047403501980339,5,0.9333199999999999
+reverse,replay,counterfactual-teacher replay,1,lung,0.8591,0.024075921581530355,5,0.85686
+reverse,replay,counterfactual-teacher replay,1,rcc,0.9566399999999999,0.012524096773819679,5,0.9526199999999999
+reverse,seqft,sequential fine-tuning,1,brca,0.89538,0.05306512037110628,5,0.92688
+reverse,seqft,sequential fine-tuning,1,esca,0.8964399999999999,0.03765817308367467,5,0.89334
+reverse,seqft,sequential fine-tuning,1,lung,0.8674200000000001,0.021669033204091047,5,0.8652799999999999
+reverse,seqft,sequential fine-tuning,1,rcc,0.9620000000000001,0.014710710383934565,5,0.9552799999999999
+reverse,distill,old-policy / policy-fidelity distillation,2,brca,0.8559599999999999,0.07121287102764495,5,0.91396
+reverse,distill,old-policy / policy-fidelity distillation,2,esca,0.92322,0.031931050718697014,5,0.91998
+reverse,distill,old-policy / policy-fidelity distillation,2,lung,0.8629,0.025315015307125533,5,0.8610599999999999
+reverse,distill,old-policy / policy-fidelity distillation,2,rcc,0.9688800000000001,0.007350986328378032,5,0.9684200000000001
+reverse,ewc,EWC parameter regularization,2,brca,0.8559599999999999,0.07121287102764495,5,0.91396
+reverse,ewc,EWC parameter regularization,2,esca,0.9125,0.03423265984407288,5,0.9066600000000001
+reverse,ewc,EWC parameter regularization,2,lung,0.8523200000000001,0.018719161305998724,5,0.85052
+reverse,ewc,EWC parameter regularization,2,rcc,0.9611000000000001,0.009298655816837201,5,0.96052
+reverse,joint,joint-training reference,2,brca,0.8559599999999999,0.07121287102764495,5,0.91396
+reverse,joint,joint-training reference,2,esca,0.95,0.027950849718747367,5,0.94664
+reverse,joint,joint-training reference,2,lung,0.85816,0.019127414880218414,5,0.85686
+reverse,joint,joint-training reference,2,rcc,0.9651799999999999,0.009123157348199124,5,0.9658
+reverse,lwf,new-state old-policy distillation,2,brca,0.8559599999999999,0.07121287102764495,5,0.91396
+reverse,lwf,new-state old-policy distillation,2,esca,0.975,0.03423265984407287,5,0.97332
+reverse,lwf,new-state old-policy distillation,2,lung,0.87338,0.02383960989613714,5,0.87158
+reverse,lwf,new-state old-policy distillation,2,rcc,0.96684,0.008389755657943861,5,0.96578
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),2,brca,0.8559599999999999,0.07121287102764495,5,0.91396
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),2,esca,0.92322,0.031931050718697014,5,0.91998
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),2,lung,0.8527000000000001,0.028276403590272937,5,0.85054
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),2,rcc,0.95906,0.00456157867409956,5,0.9578800000000001
+reverse,replay,counterfactual-teacher replay,2,brca,0.8559599999999999,0.07121287102764495,5,0.91396
+reverse,replay,counterfactual-teacher replay,2,esca,0.9,0.03423265984407289,5,0.89334
+reverse,replay,counterfactual-teacher replay,2,lung,0.85244,0.03201113868640102,5,0.85052
+reverse,replay,counterfactual-teacher replay,2,rcc,0.9688800000000001,0.012500879969026211,5,0.9684000000000001
+reverse,seqft,sequential fine-tuning,2,brca,0.8559599999999999,0.07121287102764495,5,0.91396
+reverse,seqft,sequential fine-tuning,2,esca,0.9107200000000001,0.03680478229795687,5,0.9066600000000001
+reverse,seqft,sequential fine-tuning,2,lung,0.8648199999999999,0.010556609304127908,5,0.86316
+reverse,seqft,sequential fine-tuning,2,rcc,0.9688800000000001,0.01688392726826317,5,0.9684200000000001
+reverse,distill,old-policy / policy-fidelity distillation,4,brca,0.86486,0.08167917727303572,5,0.9032199999999999
+reverse,distill,old-policy / policy-fidelity distillation,4,esca,0.95,0.027950849718747377,5,0.94664
+reverse,distill,old-policy / policy-fidelity distillation,4,lung,0.8525600000000001,0.011137459315301725,5,0.85054
+reverse,distill,old-policy / policy-fidelity distillation,4,rcc,0.9277599999999999,0.04777649003432544,5,0.93686
+reverse,ewc,EWC parameter regularization,4,brca,0.86486,0.08167917727303572,5,0.9032199999999999
+reverse,ewc,EWC parameter regularization,4,esca,0.92142,0.07588449775810603,5,0.91998
+reverse,ewc,EWC parameter regularization,4,lung,0.8356999999999999,0.02501549519797682,5,0.83368
+reverse,ewc,EWC parameter regularization,4,rcc,0.9422,0.024034142381204295,5,0.94474
+reverse,joint,joint-training reference,4,brca,0.86486,0.08167917727303572,5,0.9032199999999999
+reverse,joint,joint-training reference,4,esca,0.90894,0.039107390605868896,5,0.9066600000000001
+reverse,joint,joint-training reference,4,lung,0.8463200000000001,0.023876180599082423,5,0.8442000000000001
+reverse,joint,joint-training reference,4,rcc,0.9446,0.03373751620970334,5,0.95
+reverse,lwf,new-state old-policy distillation,4,brca,0.86486,0.08167917727303572,5,0.9032199999999999
+reverse,lwf,new-state old-policy distillation,4,esca,0.90894,0.035373196067078796,5,0.9066600000000001
+reverse,lwf,new-state old-policy distillation,4,lung,0.8411199999999999,0.027177325107523014,5,0.83788
+reverse,lwf,new-state old-policy distillation,4,rcc,0.95814,0.021918553784408306,5,0.9631399999999999
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),4,brca,0.86486,0.08167917727303572,5,0.9032199999999999
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),4,esca,0.9625,0.03423265984407289,5,0.95998
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),4,lung,0.84766,0.011947928690781491,5,0.8463200000000001
+reverse,ours_lambda1,Utility-Weighted Replay Distillation (λ=1.0),4,rcc,0.9266,0.01450430970436025,5,0.92896
+reverse,replay,counterfactual-teacher replay,4,brca,0.86486,0.08167917727303572,5,0.9032199999999999
+reverse,replay,counterfactual-teacher replay,4,esca,0.92322,0.03193105071869701,5,0.91998
+reverse,replay,counterfactual-teacher replay,4,lung,0.8475400000000001,0.016734634743549033,5,0.8463200000000001
+reverse,replay,counterfactual-teacher replay,4,rcc,0.9527599999999999,0.024193656193308197,5,0.96052
+reverse,seqft,sequential fine-tuning,4,brca,0.86486,0.08167917727303572,5,0.9032199999999999
+reverse,seqft,sequential fine-tuning,4,esca,0.8964399999999999,0.037658173083674716,5,0.89334
+reverse,seqft,sequential fine-tuning,4,lung,0.8275399999999999,0.03399938234733098,5,0.82528
+reverse,seqft,sequential fine-tuning,4,rcc,0.9503599999999999,0.02081497057408444,5,0.95526

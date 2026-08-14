@@ -1,13 +1,17 @@
 """持續學習方法（main table 的全部方法）與 CL 專用量測。
 
-方法定義見 docs/protocol.md §3：
-    seqft / ewc / lwf / replay / distill / ours / ours_uniform / joint
+方法定義見 docs/protocol.md §3。paper-facing labels：
+    replay = counterfactual-teacher replay
+    distill = old-policy / policy-fidelity distillation
+    ours_uniform = replay + policy distillation (uniform loss weight)
+    ours = Utility-Weighted Replay Distillation (a variant)
+    joint = joint-training reference
 
 engine.train_navigator 保留給舊腳本；本模組的 train_navigator_cl 是一般化版本：
     - imitation：新任務 teacher 分佈的 KL 模仿（所有方法共同）
     - lwf     ：新任務 state 上 KL(π_new ‖ π_old)（無 buffer）
-    - replay  ：buffer state 上模仿舊 gain target
-    - distill ：buffer state 上 KL(π_new ‖ π_old)，可選 utility 權重
+    - replay  ：buffer state 上模仿 counterfactual-teacher gain target
+    - distill ：buffer state 上 KL(π_new ‖ π_old)，uniform 權重
     - ewc     ：Fisher 加權的參數距離懲罰
 """
 
@@ -96,7 +100,12 @@ def kl_drift(pi_ref: list[torch.Tensor], pi_now: list[torch.Tensor]) -> float:
 # ------------------------------------------------------------------ buffer / fisher
 def build_buffer(steps: list[TeacherStep], per_slide: int = 2,
                  cap: int = 512) -> list[TeacherStep]:
-    """每張 slide 取前 per_slide 步；超過 cap 時保留 utility 最高者。"""
+    """每張 slide 取前 per_slide 步；超過 cap 時保留 utility 最高者。
+
+    This utility-prioritized truncation is shared by `ours` and
+    `ours_uniform`; their ablation isolates loss weighting, not memory
+    composition.
+    """
     by_sid: dict[str, list[TeacherStep]] = {}
     for st in steps:
         by_sid.setdefault(st.sid, []).append(st)
