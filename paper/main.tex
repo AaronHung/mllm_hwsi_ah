@@ -121,14 +121,22 @@ predictor, which is what makes ``where to look'' a genuine sequential policy.
 
 \textbf{Visual navigation and active perception.} Vision-language navigation
 (VLN) learns instruction-conditioned policies over discrete panorama graphs
-\cite{anderson2018r2r}, with topological-map agents such as DUET
-\cite{chen2022duet} and history-aware transformers \cite{chen2021hamt};
-recurrent hard attention dates to glimpse networks \cite{mnih2014ram}.
-Recent work brings navigation to WSI \cite{pathagent2026,pathnavigate2026}.
-These assume human demonstration paths or geometric success signals,
-and train for a \emph{single} task; continual policy learning is untouched,
-and TCGA offers no expert trajectories --- motivating our counterfactual
-teacher and our focus on policy retention.
+\cite{anderson2018r2r}; our coarse-to-fine design echoes DUET's dual-scale
+planning over topological maps \cite{chen2022duet} and our evidence state
+parallels history-aware encoding \cite{chen2021hamt}; recurrent hard
+attention dates to glimpse networks \cite{mnih2014ram}. VLN's
+\emph{supervision stack}, however, does not transfer: it rests on human
+demonstration trajectories and a geometric, task-agnostic success criterion.
+Neither exists for WSI --- expert viewing paths do not scale (a recent
+benchmark required ten pathologists for 1.8k slides
+\cite{pathagentbench2026}), and success is defined only through a
+task-specific evaluator that \emph{changes} with each task. Continual VLN
+addresses scene-domain shift with ground-truth-trajectory replay
+\cite{jeong2025cvln}; task-incremental navigation under weak,
+teacher-drifting supervision is unexplored. Training-free WSI agents
+\cite{pathagent2026,pathnavigate2026} navigate each slide from scratch
+without learning --- they neither accumulate navigation knowledge nor
+forget it.
 
 \section{Problem Setting and Protocol}
 \label{sec:setting}

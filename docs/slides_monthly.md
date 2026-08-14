@@ -124,16 +124,20 @@ $$\mathcal{L} = \mathcal{L}_{\text{nav}}^{\text{new}} + \sum_{s\in\mathcal{M}}\B
 
 ---
 
-## 10. VLN survey（老師指定作業）— 結論
+## 10. VLN survey（老師指定作業）— 結論（31 篇，全部網搜驗證）
 
-- **可借**：離散圖上的 policy（R2R panorama graph ↔ region pyramid）、
-  DUET coarse/fine 雙尺度決策、HAMT history memory、SPL 式效率指標
-- **不可直接搬（具體原因）**：
-  1. VLN 有人類示範軌跡（R2R ground-truth path）；TCGA 無醫師 viewing 軌跡且大規模收集不可行 → 監督必須改弱監督（我們的 counterfactual gain）
-  2. VLN success 是幾何的（3m 內到達）；WSI 無幾何 goal，success 只能由下游診斷定義
-  3. panorama 連續視角 vs WSI 離散 zoom 金字塔
-- **Continual VLN 幾乎空白** → 我們的差異化位置
-- 詳見 docs/vln_survey.md
+**一句話**：VLN 方法棧的三個地基——人類示範軌跡、幾何 success、可重渲染 simulator——
+在 WSI 上**一個都不存在**；可搬的是地基之上的**決策結構**（算力不是差異，國網可覆蓋）
+
+- **可借（具體）**：DUET coarse/fine 雙尺度 + global action space（消融證明互補）；
+  DAgger/PID on-policy 蒸餾（我們的 frozen evaluator 天生是 queryable oracle，DUET 實證 PID > RL）；
+  HAMT history encoding；SPL → accuracy-per-budget
+- **不可搬（確定原因）**：
+  1. **監督地基**：R2R 每條 instruction 有 GT 軌跡；PathAgentBench 動用 10 位病理醫師只標得 1,822 WSI → 醫師軌跡不可規模化，監督必須改 computed teacher
+  2. **Success 性質**：VLN 是幾何、task-agnostic（3m 內），continual 時 reward 不漂移；我們的 success 由 evaluator 按任務定義，**換任務即翻轉** → 我們的 forgetting 成因在 VLN 結構中不存在
+  3. **Action 語義**：VLN 是空間位移（觀測免費），WSI zoom 是**資訊揭露**（active perception）→ 角度編碼/方位/最短路徑先驗無對應物
+- **Continual VLN 現況**：4 篇（CVLN BMVC 2025 等）全是 scene-domain incremental + GT path replay；
+  task-incremental + 弱監督 teacher 漂移 = **無先例**（我們的空缺）
 
 ---
 
