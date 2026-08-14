@@ -85,16 +85,16 @@
 | Gate 1 hardening | 完成，PASS | `results/gate1_significance.md` |
 | 主順序 main CL grid | 完成 | 5 個 `cl_main_can_main_full_s*.csv`，每個 211 行 |
 | 主順序 aggregation | 已完成 | `results/main_table_can_main.md`、兩張 figures |
-| 反向 task order | 執行中 | `ESCA→...` 完成後的 `run_main_cl.sh` 階段 |
-| pilot40 full CL grid | 尚未開始 / queue 等待 | `run_night_queue.sh` |
-| utility / memory / lambda ablation | 尚未開始 / queue 等待 | `scripts/run_ablation.sh` |
+| 反向 task order | 完成 | `results/main_table_can_reverse.md`、兩張 figures |
+| pilot40 full CL grid | 尚未開始，queue 已暫停 | 待 paper plan 調整後決定 |
+| utility / memory / lambda ablation | 完成 | `results/ablation_table.md`、`figures/ablation_mechanism.png` |
 | paper draft | 有四頁 skeleton，但數字仍有 placeholder | `paper/main.tex` |
 | monthly slides | 有 skeleton | `docs/slides_monthly.md` |
 
 ### 2.1 目前的 process 狀態
 
-主順序已完成；目前應讓反向順序先跑完，除非新的 project decision 明確要求停止。
-目前的 background queue 是等待主 wrapper 完成後接續 pilot40 與 ablation。
+主順序與反向順序都已完成；完整 ablation 也已完成。
+pilot40 queue 目前刻意暫停，等待 paper project 根據全部結果重新調整 claim 與實驗優先序。
 
 重要：這些 background jobs 不是 `tmux`。它們依賴目前 Mac / Cursor session；
 若需要關機或合蓋長時間執行，應先把下一批移到 RunPod `tmux`，不要把這些 process
@@ -392,6 +392,47 @@ ours vs seqft paired CI：
 - Forgetting：−0.047，CI [−0.065,−0.024]，顯著改善
 - Jaccard：+0.063，CI [+0.052,+0.075]，顯著改善
 
+### 6.4 Ablation / mechanism results
+
+完整 ablation 產物：
+
+- `results/ablation_table.md`
+- `results/ablation_per_run.csv`
+- `figures/ablation_mechanism.png`
+- aggregation script：`scripts/aggregate_ablation.py`
+
+設定：
+
+- `ablA1`：uniform utility weight，等同 `ours_uniform`
+- `ablA2a` / `ablA2b`：memory cap 128 / 2048
+- `ablA3a` / `ablA3b`：λ=0.3 / 3.0
+- 每個 setting：5 seeds、K={1,2}
+
+關鍵數字（mean over 5 seeds）：
+
+| setting | K | AA | forgetting | Jaccard | action-KL | selected utility |
+|---|---:|---:|---:|---:|---:|---:|
+| ours, memory 512, λ=1 | 1 | 0.888 | 0.011 | 0.259 | 0.069 | 0.411 |
+| uniform weight | 1 | 0.904 | 0.012 | 0.253 | 0.068 | 0.387 |
+| ours, memory 512, λ=1 | 2 | 0.897 | 0.021 | 0.144 | 0.028 | 0.136 |
+| uniform weight | 2 | 0.887 | 0.044 | 0.146 | 0.030 | 0.092 |
+| memory 128 | 2 | 0.891 | 0.031 | 0.121 | 0.047 | 0.085 |
+| memory 2048 | 2 | 0.907 | 0.010 | 0.189 | 0.020 | 0.190 |
+| λ=0.3 | 2 | 0.905 | 0.021 | 0.124 | 0.040 | 0.115 |
+| λ=3.0 | 2 | 0.900 | 0.026 | 0.201 | 0.016 | 0.141 |
+
+目前可支持的 interpretation：
+
+1. **Utility weighting 有 budget-dependent effect。** K=2 時相對 uniform
+   將 forgetting 從 0.044 降至 0.021，selected utility 從 0.092 升至 0.136；
+   K=1 時差異很小，不能宣稱 universal improvement。
+2. **Memory 128 明顯不足。** K=2 時 memory 128 的 forgetting/Jaccard/KL
+   都劣於 memory 512；memory 2048 在 K=2 進一步改善 AA、forgetting、Jaccard。
+3. **λ 是 stability-plasticity trade-off。** λ=3 在 K=2 提高 Jaccard、
+   降低 action-KL，但 forgetting 反而高於 λ=1；不能只用單一 metric 選 λ。
+4. 這些是 5-seed descriptive results；若要寫「顯著」，仍需對重要 ablation
+   做 paired seed-level CI。
+
 ---
 
 ## 7. 目前結果真正支持的 claim
@@ -416,17 +457,18 @@ ours vs seqft paired CI：
 
 1. 不能宣稱 `ours` 在所有 metric、所有 K 都是最佳。
    `distill` 在 K=1、2、4 都有更高 Jaccard，且 action-KL 也常更低。
-2. 不能宣稱 utility weighting 已被單獨證明有效。
-   目前 `ours` 與 `distill` 的差異同時包含 replay target 與 utility weighting，
-   必須等待 ablation，或重新設計嚴格的 `distill-only` / `replay-only` / `uniform+replay`
-   對照。
+2. 不能宣稱 utility weighting 在所有 budget 都有效。
+   Ablation 顯示 K=2 相對 uniform 有明顯 descriptive gain，但 K=1 差異很小；
+   重要 ablation 差異仍需 paired seed-level CI，且 `distill-only` 與
+   `uniform+replay` 不是同一個 baseline。
 3. 不能宣稱 AA 在所有 budget 顯著改善。
    目前 ours vs seqft 的 AA：
    - K=1：CI 跨 0
    - K=2：CI 跨 0
    - K=4：CI 不跨 0
 4. 不能把 can_dataset pseudo-region 寫成真實 spatial navigation。
-5. 不能把目前主順序結果當成 task-order robust；反向 order 尚未完成。
+5. 不能只把主順序結果當成 task-order robust；反向 order 已完成，
+   但仍需將兩個 order 的 ranking 與 effect size 合併分析。
 6. 不能使用 paper draft 中尚未填數字的 placeholder 作為結果。
 
 ---
@@ -454,10 +496,10 @@ ours vs seqft paired CI：
 目前較誠實的說法是：
 
 > Utility-weighted policy distillation with replay is a strong forgetting
-> mitigation, especially for the strictest and largest-budget settings,
-> but uniform policy distillation is a competitive baseline for behavioral
-> overlap. The ablation determines whether utility weighting gives a
-> consistent advantage beyond replay and uniform distillation.
+> mitigation, with a budget-dependent advantage over uniform weighting;
+> however, uniform policy distillation remains a competitive baseline for
+> behavioral overlap. Memory size and lambda expose a stability--plasticity
+> trade-off rather than a single universally optimal setting.
 
 中文意思：
 
@@ -468,11 +510,11 @@ ours vs seqft paired CI：
 
 ### 8.3 備援故事
 
-如果後續 ablation 顯示 utility weighting 沒有穩定增益，應把方法 claim 降級成：
+如果 paired ablation CI 無法支持 utility weighting 的穩定增益，應把方法 claim 降級成：
 
 > Replay-based policy preservation is sufficient to prevent much of the
 > navigation forgetting; utility weighting is a targeted variant whose
-> benefit depends on budget and task order.
+> benefit depends on budget, memory, and task order.
 
 論文仍可成立，因為 navigation forgetting + behavior-level evaluation
 本身仍是主要方法分析 contribution。
@@ -556,28 +598,24 @@ utility-weighted replay + distill
    - ours vs distill ranking
 4. 確認主 claim 是否依 task order 改變。
 
-### Phase 2：最小必要 ablation
+### Phase 2：ablation（已完成，待統計整理）
 
-優先順序：
+已完成的設定：
 
-1. `distill-only` vs `ours`：
-   - utility weighting 是否真的帶來增益？
-2. replay buffer size：
-   - 128 / 512 / 2048
-3. λ：
-   - 0.3 / 1.0 / 3.0
-4. utility weighting：
-   - utility weight vs uniform weight
+1. uniform utility weight vs utility weighting；
+2. replay buffer size 128 / 512 / 2048；
+3. λ=0.3 / 1.0 / 3.0。
 
-每一項不需要立刻跑完整所有方法；先用：
+結果已寫入 `results/ablation_table.md`。下一步不是盲目擴大矩陣，
+而是：
 
 ```text
-main order
-K={1,2,4}
-seeds={0,1,2}
+對關鍵差異做 paired seed-level CI
+確認 utility weighting 是否值得保留為主要 method claim
+確認 memory 2048 是否只是 descriptive trend
 ```
 
-找出 effect direction 後，再對最重要設定補 5 seeds。
+若需要補跑，優先只補最能改變 paper claim 的設定。
 
 ### Phase 3：pilot40 generalization
 
@@ -599,7 +637,7 @@ seeds={0,1,2}
 2. budget × selection Jaccard
 3. action KL drift
 4. selected-region utility
-5. ours vs distill 的 utility weighting ablation
+5. ours vs distill / uniform 的 utility weighting ablation
 
 如果要借 VLN survey 的 insight，再加：
 
@@ -707,7 +745,8 @@ WSI 是 benchmark，CV methodology 是主要定位。
 - ours 的 forgetting 顯著低於 seqft。
 - 但是 distill-only 在部分 Jaccard / action-KL 指標優於 ours。
 - 因此不能直接宣稱 ours 在所有 metric 都是最佳。
-- reverse order、pilot40 full CL、ablation 尚未全部完成。
+- reverse order 與 ablation 已完成；pilot40 full CL 尚未開始，
+  且 ablation 的 paired CI / method audit 尚待完成。
 
 請先輸出一份「paper project adjustment memo」，內容必須包括：
 
@@ -761,13 +800,13 @@ G. Execution plan：
 > 我們已經建立並驗證一個可學習的 budgeted evidence-acquisition environment，
 > 證明 shared navigator 在 sequential tasks 下產生明顯 navigation forgetting，
 > 並觀察到 replay/distillation 類方法能顯著減少 forgetting。
-> Utility weighting 是一個有動機但尚待 ablation 確認的 refinement；
-> 它目前在 strict/large-budget 的 AA 與 forgetting 上最有說服力，
-> 但 uniform distillation 在部分 behavior metrics 上更具競爭力。
+> Ablation 顯示 utility weighting 的增益依 budget 而變化：K=2 時相對
+> uniform weighting 明顯降低 forgetting，但 K=1 時差異很小；memory size
+> 與 lambda 也呈現 stability--plasticity trade-off。
 
 這個較保守的版本有三個優點：
 
 1. 不會被主表中的 `distill` 結果反駁。
 2. 把 navigation forgetting 與評估 protocol 保留為穩健核心。
-3. 讓 ablation 的結果自然決定 `ours` 是否升級為主要 method claim，
-   而不是事先假設答案。
+3. 讓 paired ablation CI 與 reverse-order 結果決定 `ours` 是否升級為主要
+   method claim，而不是事先假設答案。
