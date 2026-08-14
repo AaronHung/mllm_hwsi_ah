@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -26,7 +27,7 @@ import torch
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from nav import get_device  # noqa: E402
+from nav import add_device_argument, device_info, resolve_device  # noqa: E402
 from nav.engine import (build_bank, eval_policy, teacher_rollout,  # noqa: E402
                         train_evaluator, train_navigator)
 from nav.pilot40 import CLASSES, Pilot40  # noqa: E402
@@ -40,10 +41,15 @@ def main():
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--task", choices=["4class", "2class"], default="4class")
     ap.add_argument("--budgets", type=int, nargs="+", default=None)
+    add_device_argument(ap)
+    ap.add_argument("--output-dir", type=Path, default=None,
+                    help="new-run directory; defaults to runs/v2/<tag>")
     args = ap.parse_args()
 
-    device = get_device()
-    print(f"device = {device}")
+    device = resolve_device(args.device)
+    meta = device_info(args.device, device).as_dict()
+    print(f"device = {device} | torch = {meta['torch_version']} | "
+          f"MPS fallback = {meta['mps_fallback']}")
     ds = Pilot40(REPO / "data")
     sids = ds.slide_ids
 
@@ -106,17 +112,24 @@ def main():
                                  learned=acc_l, uniform=acc_u,
                                  random_mean=float(np.mean(accs_r)),
                                  random_std=float(np.std(accs_r)),
-                                 teacher_oracle=float(acc_t)))
+                                 teacher_oracle=float(acc_t),
+                                 resolved_device=str(device),
+                                 torch_version=meta["torch_version"],
+                                 mps_fallback=meta["mps_fallback"]))
                 print(f"[seed{seed} fold{fold_i} K={k}] learned={acc_l:.3f} "
                       f"random={np.mean(accs_r):.3f}±{np.std(accs_r):.3f} "
                       f"uniform={acc_u:.3f} oracle={acc_t:.3f} "
                       f"({time.time() - t0:.0f}s)")
 
     import pandas as pd
-    df = pd.DataFrame(rows)
-    RESULTS.mkdir(exist_ok=True)
     tag = "smoke" if args.smoke else "full"
-    df.to_csv(RESULTS / f"gate1_{args.task}_{tag}.csv", index=False)
+    out_dir = (Path(args.output_dir) if args.output_dir is not None
+               else REPO / "runs" / "v2" / f"gate1_{args.task}_{tag}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "metadata.json").write_text(
+        json.dumps(meta, indent=2, ensure_ascii=False))
+    df = pd.DataFrame(rows)
+    df.to_csv(out_dir / f"gate1_{args.task}_{tag}.csv", index=False)
 
     agg = df.groupby("K")[["learned", "random_mean", "uniform",
                            "teacher_oracle"]].agg(["mean", "std"])
@@ -144,13 +157,14 @@ def main():
         ax.set_title(f"Gate 1: learned navigator vs baselines — {args.task}")
         ax.legend()
         fig.tight_layout()
-        FIGURES.mkdir(exist_ok=True)
-        fig.savefig(FIGURES / f"gate1_{args.task}.png", dpi=150)
+        figure_dir = out_dir / "figures"
+        figure_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(figure_dir / f"gate1_{args.task}.png", dpi=150)
 
         gate = (df.groupby("K")["learned"].mean()
                 > df.groupby("K")["random_mean"].mean())
         verdict = "PASS" if gate.any() else "FAIL"
-        (RESULTS / f"gate1_{args.task}_summary.md").write_text(
+        (out_dir / f"gate1_{args.task}_summary.md").write_text(
             f"# Gate 1 — {args.task}\n\n"
             f"```\n{agg.round(3).to_string()}\n```\n\n"
             f"**Gate 1（learned > random 至少一個 K）：{verdict}**\n"

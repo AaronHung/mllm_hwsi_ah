@@ -9,9 +9,12 @@ cd "$(dirname "$0")/.."
 
 JOBS="${1:-4}"
 PY="${PYTHON:-python}"
+DEVICE="${DEVICE:-auto}"
+RUN_TAG="${RUN_TAG:-ablation_$(date +%Y%m%d_%H%M%S)}"
+RUN_ROOT="${RUN_ROOT:-runs/v2/$RUN_TAG}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}" MKL_NUM_THREADS=2
 
-mkdir -p results logs
+mkdir -p "$RUN_ROOT/logs"
 sem() { while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do sleep 5; done; }
 
 run() {  # run <tag> <extra args...>
@@ -19,9 +22,11 @@ run() {  # run <tag> <extra args...>
     for seed in 0 1 2 3 4; do
         sem
         echo "[launch] $tag seed=$seed"
+        out_dir="$RUN_ROOT/results/$tag/seed_${seed}"
         "$PY" scripts/cl_main.py --dataset can --order main \
-            --seeds "$seed" --budgets 1 2 --tag "${tag}_s${seed}" "$@" \
-            > "logs/abl_${tag}_s${seed}.log" 2>&1 &
+            --seeds "$seed" --budgets 1 2 --tag "${RUN_TAG}_${tag}_s${seed}" \
+            --device "$DEVICE" --output-dir "$out_dir" --resume "$@" \
+            > "$RUN_ROOT/logs/abl_${tag}_s${seed}.log" 2>&1 &
     done
 }
 

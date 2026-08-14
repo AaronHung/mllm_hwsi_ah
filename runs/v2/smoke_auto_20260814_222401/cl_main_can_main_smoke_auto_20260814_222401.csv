@@ -1,0 +1,7 @@
+method,seed,K,stage,task,task_idx,bal_acc,acc,jaccard,action_kl,sel_utility,random_ref,n_test,wall_s,requested,torch_version,cuda_available,mps_available,mps_fallback,resolved_device,run_tag,dataset,order
+seqft,0,1,1,esca,1,1.0,1.0,1.0,0.0,0.6377,0.75,12,1.4,auto,2.12.0,False,True,1,mps,smoke_auto_20260814_222401,can,main
+seqft,0,1,2,esca,1,0.9167,0.9167,0.25,0.1777,0.5085,0.75,12,1.8,auto,2.12.0,False,True,1,mps,smoke_auto_20260814_222401,can,main
+seqft,0,1,2,lung,2,0.8333,0.8333,1.0,0.0,0.3279,0.6167,12,1.9,auto,2.12.0,False,True,1,mps,smoke_auto_20260814_222401,can,main
+ours,0,1,1,esca,1,1.0,1.0,1.0,0.0,0.6377,0.75,12,0.4,auto,2.12.0,False,True,1,mps,smoke_auto_20260814_222401,can,main
+ours,0,1,2,esca,1,1.0,1.0,0.4167,0.0269,0.6412,0.75,12,0.9,auto,2.12.0,False,True,1,mps,smoke_auto_20260814_222401,can,main
+ours,0,1,2,lung,2,0.8333,0.8333,1.0,-0.0,0.3019,0.6167,12,1.0,auto,2.12.0,False,True,1,mps,smoke_auto_20260814_222401,can,main

@@ -1,0 +1,5 @@
+device = mps | torch = 2.12.0 | MPS fallback = 1
+λ_ewc = 100.0
+[seqft seed0 K=1] AA=0.875 T1(bal=0.917, jac=0.25, kl=0.178) (2s)
+[ours seed0 K=1] AA=0.917 T1(bal=1.000, jac=0.42, kl=0.027) (3s)
+done -> /Users/aaron/research/01_mllm_hwsi/mllm_hwsi_ah/runs/v2/smoke_auto_20260814_222401/cl_main_can_main_smoke_auto_20260814_222401.csv

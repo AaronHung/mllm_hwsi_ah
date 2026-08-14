@@ -45,12 +45,17 @@ def build_bank(ds, sids: list[str], label_of: dict[str, int]) -> list[Slide]:
 # ---------------------------------------------------------------- env helpers
 def evidence_of(slide: Slide, zoomed: list[int], device) -> torch.Tensor:
     if not zoomed:
-        return torch.zeros(slide.high.shape[1], device=device)
+        return torch.zeros(slide.high.shape[1], device=device,
+                           dtype=slide.high.dtype)
     return slide.high[zoomed].to(device).mean(0)
 
 
 def context_of(slide: Slide, zoomed: list[int], k_total: int, device) -> torch.Tensor:
-    remain = torch.tensor([(k_total - len(zoomed)) / k_total], device=device)
+    remain = torch.tensor(
+        [(k_total - len(zoomed)) / k_total],
+        device=device,
+        dtype=slide.high.dtype,
+    )
     return torch.cat([evidence_of(slide, zoomed, device), remain])
 
 
@@ -180,7 +185,9 @@ def spatial_uniform(coords: np.ndarray, k: int) -> list[int]:
     if k >= n:
         return list(range(n))
     g = int(np.ceil(np.sqrt(k)))
-    xy = coords.astype(np.float64)
+    # MPS does not support float64 tensors; keep geometry preprocessing
+    # float32 as well so backend-specific dtype promotion cannot leak in.
+    xy = coords.astype(np.float32, copy=False)
     mn, mx = xy.min(0), xy.max(0)
     span = np.maximum(mx - mn, 1e-9)
     cell = np.minimum(((xy - mn) / span * g).astype(int), g - 1)

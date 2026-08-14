@@ -1,0 +1,4 @@
+{
+  "resolved_device": "cpu",
+  "scope": "nav/*.py + scripts/*.py"
+}

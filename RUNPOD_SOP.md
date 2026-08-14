@@ -1,5 +1,9 @@
 # RunPod SOP — mllm_hwsi_ah
 
+> **v2 canonical SOP:** use [`docs/RUNPOD_SOP.md`](docs/RUNPOD_SOP.md).
+> This file is retained as the Protocol-v1 historical reference; new runs
+> must use `runs/v2/<run_tag>/` and must not write the paths below.
+
 本專案版標準流程：Mac 開發 + smoke → GitHub 傳程式 → RunPod tmux 跑完整版 → 結果 push 回 GitHub → Mac pull 分析。大檔（特徵 tar）不走 git，走 scp 或 Network Volume。
 
 ## 0. 原則

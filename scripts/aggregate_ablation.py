@@ -28,7 +28,9 @@ import numpy as np
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "scripts"))
+from nav import add_device_argument  # noqa: E402
 from aggregate_results import per_run_metrics  # noqa: E402
 
 RESULTS = REPO / "results"
@@ -43,9 +45,9 @@ ABLATION_LABELS = {
 }
 
 
-def load_runs() -> pd.DataFrame:
+def load_runs(input_dir: Path = RESULTS) -> pd.DataFrame:
     rows = []
-    for path in sorted(RESULTS.glob("cl_main_can_main_ablA*_s*.csv")):
+    for path in sorted(input_dir.rglob("*ablA*_s*.csv")):
         m = re.search(r"_(ablA[123][ab]? )_s", path.name.replace(" ", ""))
         if not m:
             m = re.search(r"_(ablA[123][ab]?)_s", path.name)
@@ -59,7 +61,8 @@ def load_runs() -> pd.DataFrame:
 
     # Include main-order baselines for direct comparison.
     main = pd.concat(
-        [pd.read_csv(p) for p in sorted(RESULTS.glob("cl_main_can_main_full_s*.csv"))],
+        [pd.read_csv(p) for p in sorted(
+            input_dir.rglob("cl_main_can_main_full_s*.csv"))],
         ignore_index=True,
     )
     main = main[main.method.isin(["ours", "distill"])]
@@ -79,7 +82,7 @@ def fmt(row, col: str) -> str:
     return f"{row[(col, 'mean')]:.3f} ± {row[(col, 'std')]:.3f}"
 
 
-def write_markdown(run: pd.DataFrame) -> None:
+def write_markdown(run: pd.DataFrame, output_dir: Path = RESULTS) -> None:
     s = summary_table(run).set_index(["tag", "K"])
     lines = [
         "# Ablation / mechanism analysis",
@@ -122,10 +125,11 @@ def write_markdown(run: pd.DataFrame) -> None:
             "",
         ]
     )
-    (RESULTS / "ablation_table.md").write_text("\n".join(lines))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "ablation_table.md").write_text("\n".join(lines))
 
 
-def plot(run: pd.DataFrame) -> None:
+def plot(run: pd.DataFrame, output_dir: Path = FIGURES) -> None:
     s = summary_table(run).set_index(["tag", "K"])
     settings = ["distill_main", "ours_main", "ablA1", "ablA2a", "ablA2b", "ablA3a", "ablA3b"]
     labels = ["distill", "ours", "uniform", "mem128", "mem2048", "λ=.3", "λ=3"]
@@ -157,21 +161,29 @@ def plot(run: pd.DataFrame) -> None:
     axes[0].legend()
     fig.suptitle("Ablation and mechanism analysis — can_dataset main order")
     fig.tight_layout()
-    FIGURES.mkdir(exist_ok=True)
-    fig.savefig(FIGURES / "ablation_mechanism.png", dpi=170)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_dir / "ablation_mechanism.png", dpi=170)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", default="full")
+    ap.add_argument("--input-dir", type=Path, default=RESULTS)
+    ap.add_argument("--output-dir", type=Path, default=None,
+                    help="new-run output; defaults to runs/v2/ablation_<tag>")
+    add_device_argument(ap)
     args = ap.parse_args()
-    run = load_runs()
-    run.to_csv(RESULTS / "ablation_per_run.csv", index=False)
-    write_markdown(run)
-    plot(run)
+    output_dir = (args.output_dir if args.output_dir is not None else
+                  REPO / "runs" / "v2" / f"ablation_{args.tag}")
+    figure_dir = output_dir / "figures"
+    run = load_runs(args.input_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    run.to_csv(output_dir / "ablation_per_run.csv", index=False)
+    write_markdown(run, output_dir)
+    plot(run, figure_dir)
     print(f"loaded {len(run)} per-run rows")
-    print(RESULTS / "ablation_table.md")
-    print(FIGURES / "ablation_mechanism.png")
+    print(output_dir / "ablation_table.md")
+    print(figure_dir / "ablation_mechanism.png")
 
 
 if __name__ == "__main__":

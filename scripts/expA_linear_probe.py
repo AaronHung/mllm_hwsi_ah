@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections import Counter
 from pathlib import Path
@@ -24,6 +25,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from nav import add_device_argument, device_info, resolve_device  # noqa: E402
 from nav.pilot40 import CLASSES, Pilot40  # noqa: E402
 
 RESULTS = REPO / "results"
@@ -33,7 +35,7 @@ CHANCE = {"2class": 0.50, "4class": 0.25}
 
 
 # ---------------------------------------------------------------- inventory
-def run_inventory(ds: Pilot40) -> bool:
+def run_inventory(ds: Pilot40, results_dir: Path = RESULTS) -> bool:
     lines = ["# 實驗 A 第 0 步：資料盤點", ""]
     ok = True
 
@@ -84,8 +86,8 @@ def run_inventory(ds: Pilot40) -> bool:
         lines.append("- 缺漏：無，40/40 五層齊全")
 
     lines += ["", f"**盤點結論：{'PASS' if ok else 'FAIL'}**"]
-    RESULTS.mkdir(exist_ok=True)
-    (RESULTS / "expA_inventory.md").write_text("\n".join(lines))
+    results_dir.mkdir(parents=True, exist_ok=True)
+    (results_dir / "expA_inventory.md").write_text("\n".join(lines))
     print("\n".join(lines))
     return ok
 
@@ -152,10 +154,21 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-root", default=str(REPO / "data"))
     ap.add_argument("--inventory-only", action="store_true")
+    add_device_argument(ap)
+    ap.add_argument("--output-dir", type=Path, default=None,
+                    help="new-run directory; defaults to runs/v2/expA")
     args = ap.parse_args()
 
+    device = resolve_device(args.device)
+    meta = device_info(args.device, device).as_dict()
+    print(f"resolved device = {device} (sklearn probe executes on CPU)")
     ds = Pilot40(args.data_root)
-    ok = run_inventory(ds)
+    out_dir = (Path(args.output_dir) if args.output_dir is not None
+               else REPO / "runs" / "v2" / "expA")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "metadata.json").write_text(
+        json.dumps(meta, indent=2, ensure_ascii=False))
+    ok = run_inventory(ds, out_dir)
     if args.inventory_only:
         sys.exit(0 if ok else 1)
     if not ok:
@@ -186,19 +199,22 @@ def main():
                                  cv_type="loo", accuracy=round(acc, 4),
                                  balanced_accuracy=round(bacc, 4),
                                  per_class_recall="|".join(
-                                     f"{c}:{r:.2f}" for c, r in zip(labels_order, rec))))
+                                     f"{c}:{r:.2f}" for c, r in zip(labels_order, rec)),
+                                 resolved_device=str(device),
+                                 torch_version=meta["torch_version"]))
                 am, asd, bm, bsd = kfold_eval(make_model, X, y)
                 rows.append(dict(feature_level=level, task=task, classifier=clf_name,
                                  cv_type="5fold_x3seed", accuracy=round(am, 4),
                                  balanced_accuracy=round(bm, 4),
-                                 per_class_recall=f"acc_std:{asd:.3f}|bacc_std:{bsd:.3f}"))
+                                 per_class_recall=f"acc_std:{asd:.3f}|bacc_std:{bsd:.3f}",
+                                 resolved_device=str(device),
+                                 torch_version=meta["torch_version"]))
                 print(f"[{level:6s}] {task} {clf_name:6s} "
                       f"LOO acc={acc:.3f} bacc={bacc:.3f} | 5f={am:.3f}±{asd:.3f}")
 
     import pandas as pd
     df = pd.DataFrame(rows)
-    RESULTS.mkdir(exist_ok=True)
-    df.to_csv(RESULTS / "expA_probe_results.csv", index=False)
+    df.to_csv(out_dir / "expA_probe_results.csv", index=False)
 
     # ---- 主圖：各層 LOO accuracy（取該層最佳分類器） ----
     import matplotlib
@@ -232,8 +248,9 @@ def main():
     ax.set_title("Exp A: linear probe by feature level (pilot-40, exploratory)")
     ax.legend(fontsize=8, loc="lower right")
     fig.tight_layout()
-    FIGURES.mkdir(exist_ok=True)
-    fig.savefig(FIGURES / "expA_main_bar.png", dpi=150)
+    figure_dir = out_dir / "figures"
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(figure_dir / "expA_main_bar.png", dpi=150)
 
     # ---- 四分類最佳層的 confusion matrix ----
     best4 = best[best.task == "4class"].sort_values("accuracy", ascending=False).iloc[0]
@@ -253,7 +270,7 @@ def main():
                  f"{best4.classifier} (LOO acc={best4.accuracy:.2f})")
     fig.colorbar(im)
     fig.tight_layout()
-    fig.savefig(FIGURES / f"expA_confusion_{best4.feature_level}.png", dpi=150)
+    fig.savefig(figure_dir / f"expA_confusion_{best4.feature_level}.png", dpi=150)
 
     # ---- summary ----
     b2 = best[best.task == "2class"].sort_values("accuracy", ascending=False).iloc[0]
@@ -271,7 +288,7 @@ def main():
   未經病理微調的 DINOv2 權重，解讀需保留。
 - 所有隨機過程 seed 固定（inventory seed=0；5-fold seeds=0,1,2）。
 """
-    (RESULTS / "expA_summary.md").write_text(summary)
+    (out_dir / "expA_summary.md").write_text(summary)
     print(summary)
 
 

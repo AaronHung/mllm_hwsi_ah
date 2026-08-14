@@ -6,12 +6,14 @@
 - device 自動選擇（cuda > mps > cpu），同一份 code 在 Mac M1 與 RunPod 跑，不分叉。
 """
 
-import torch
+from .device import (DeviceInfo, add_device_argument, device_info, get_device,
+                     resolve_device, setup_mps)
 
-
-def get_device() -> torch.device:
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+__all__ = [
+    "DeviceInfo",
+    "add_device_argument",
+    "device_info",
+    "get_device",
+    "resolve_device",
+    "setup_mps",
+]

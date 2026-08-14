@@ -14,6 +14,8 @@
 from __future__ import annotations
 
 import sys
+import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +23,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from nav import add_device_argument, device_info, resolve_device  # noqa: E402
 from nav.pilot40 import Pilot40  # noqa: E402
 
 RESULTS = REPO / "results"
@@ -41,7 +44,7 @@ def select_spatial_uniform(feats, coords, k, rng=None):
     if k >= n:
         return np.arange(n)
     g = int(np.ceil(np.sqrt(k)))
-    xy = coords.astype(np.float64)
+    xy = coords.astype(np.float32, copy=False)
     mn, mx = xy.min(0), xy.max(0)
     span = np.maximum(mx - mn, 1e-9)
     cell = np.minimum(((xy - mn) / span * g).astype(int), g - 1)
@@ -132,7 +135,21 @@ def loo_accuracy_atypical(region_feats, y, k):
 
 # ---------------------------------------------------------------- main
 def main():
-    ds = Pilot40(REPO / "data")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data-root", default=str(REPO / "data"))
+    add_device_argument(ap)
+    ap.add_argument("--output-dir", type=Path, default=None,
+                    help="new-run directory; defaults to runs/v2/expB")
+    args = ap.parse_args()
+    device = resolve_device(args.device)
+    meta = device_info(args.device, device).as_dict()
+    print(f"resolved device = {device} (numpy/sklearn probe executes on CPU)")
+    ds = Pilot40(args.data_root)
+    out_dir = (Path(args.output_dir) if args.output_dir is not None
+               else REPO / "runs" / "v2" / "expB")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "metadata.json").write_text(
+        json.dumps(meta, indent=2, ensure_ascii=False))
     sids = ds.slide_ids
     region_feats = [ds.region(s).float().numpy() for s in sids]
     coords = [ds.coords(s) for s in sids]
@@ -154,7 +171,9 @@ def main():
 
     def record(task, policy, k, seed, acc, bacc):
         rows.append(dict(task=task, policy=policy, K=k, seed=seed,
-                         loo_accuracy=round(acc, 4), balanced_accuracy=round(bacc, 4)))
+                         loo_accuracy=round(acc, 4), balanced_accuracy=round(bacc, 4),
+                         resolved_device=str(device),
+                         torch_version=meta["torch_version"]))
         print(f"  {task} {policy:16s} K={str(k):>4s} seed={seed} acc={acc:.3f}")
 
     for task, y in tasks.items():
@@ -190,8 +209,7 @@ def main():
 
     import pandas as pd
     df = pd.DataFrame(rows)
-    RESULTS.mkdir(exist_ok=True)
-    df.to_csv(RESULTS / "expB_budget_curves.csv", index=False)
+    df.to_csv(out_dir / "expB_budget_curves.csv", index=False)
 
     # ---------------------------------------------------------------- plots
     import matplotlib
@@ -225,8 +243,9 @@ def main():
         ax.set_title(f"Exp B: accuracy vs budget — {task} (pilot-40, exploratory)")
         ax.legend(fontsize=8, loc="lower right")
         fig.tight_layout()
-        FIGURES.mkdir(exist_ok=True)
-        fig.savefig(FIGURES / f"expB_budget_curve_{task}.png", dpi=150)
+        figure_dir = out_dir / "figures"
+        figure_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(figure_dir / f"expB_budget_curve_{task}.png", dpi=150)
 
     # ---- navigation map 範例：KIRC 與 IDC 各一張，diversity K=8 ----
     examples = [next(s for s in sids if ds.label4(s) == "KIRC"),
@@ -245,7 +264,9 @@ def main():
         ax.legend(fontsize=8)
     fig.suptitle("Exp B: where does the navigator go? (region coordinates)")
     fig.tight_layout()
-    fig.savefig(FIGURES / "expB_navigation_map_examples.png", dpi=150)
+    figure_dir = out_dir / "figures"
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(figure_dir / "expB_navigation_map_examples.png", dpi=150)
 
     # ---------------------------------------------------------------- summary
     lines = ["# 實驗 B 結論（探索性結果；n=40 pilot，seed 已固定）", ""]
@@ -267,7 +288,7 @@ def main():
         avg_gain = np.mean([g for *_, g in best_rows])
         lines.append(f"- 小預算（K≤8）平均領先 random：{avg_gain * 100:+.1f} pp")
         lines.append("")
-    (RESULTS / "expB_summary.md").write_text("\n".join(lines))
+    (out_dir / "expB_summary.md").write_text("\n".join(lines))
     print("\n".join(lines))
 
 

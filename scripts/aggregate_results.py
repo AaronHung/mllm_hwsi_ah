@@ -19,6 +19,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from nav import add_device_argument  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
@@ -67,11 +69,21 @@ def main():
     ap.add_argument("--dataset", default="can")
     ap.add_argument("--order", default="main")
     ap.add_argument("--tag", default="full")
+    ap.add_argument("--input-dir", type=Path, default=RESULTS,
+                    help="directory to search recursively for run CSVs")
+    ap.add_argument("--output-dir", type=Path, default=None,
+                    help="directory for the table and figures; defaults to runs/v2")
+    add_device_argument(ap)
     args = ap.parse_args()
+    output_dir = (args.output_dir if args.output_dir is not None else
+                  REPO / "runs" / "v2" /
+                  f"aggregate_{args.dataset}_{args.order}_{args.tag}")
 
-    csvs = sorted(RESULTS.glob(f"cl_main_{args.dataset}_{args.order}_{args.tag}*.csv"))
+    csvs = sorted(args.input_dir.rglob(
+        f"cl_main_{args.dataset}_{args.order}_{args.tag}*.csv"))
     if not csvs:
-        sys.exit(f"找不到 results/cl_main_{args.dataset}_{args.order}_{args.tag}*.csv")
+        sys.exit(f"找不到 {args.input_dir}/cl_main_{args.dataset}_"
+                 f"{args.order}_{args.tag}*.csv")
     df = pd.concat([pd.read_csv(c) for c in csvs]).drop_duplicates(
         subset=["method", "seed", "K", "stage", "task_idx"], keep="last")
     print(f"loaded {len(csvs)} csv(s), {len(df)} rows")
@@ -100,7 +112,8 @@ def main():
                     m_, lo, hi = boot_ci_paired(a[col].values, b[col].values)
                     lines.append(f"\n- ours − seqft（{col}，{better} better）："
                                  f"{m_:+.3f}，95% CI [{lo:+.3f}, {hi:+.3f}]")
-    out_md = RESULTS / f"main_table_{args.dataset}_{args.order}.md"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_md = output_dir / f"main_table_{args.dataset}_{args.order}.md"
     out_md.write_text("\n".join(lines))
     print(f"table -> {out_md}")
 
@@ -108,7 +121,9 @@ def main():
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    FIGURES.mkdir(exist_ok=True)
+    figure_dir = (FIGURES if output_dir.resolve() == RESULTS.resolve()
+                  else output_dir / "figures")
+    figure_dir.mkdir(parents=True, exist_ok=True)
 
     fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.0))
     colors = {"seqft": "tab:gray", "ewc": "tab:olive", "lwf": "tab:cyan",
@@ -135,7 +150,7 @@ def main():
     axes[0].legend(fontsize=8, ncol=2)
     fig.suptitle(f"Budget × forgetting interaction — {args.dataset}/{args.order}")
     fig.tight_layout()
-    p1 = FIGURES / f"cl_budget_forgetting_{args.dataset}_{args.order}.png"
+    p1 = figure_dir / f"cl_budget_forgetting_{args.dataset}_{args.order}.png"
     fig.savefig(p1, dpi=160)
     print(f"fig -> {p1}")
 
@@ -157,7 +172,7 @@ def main():
     fig.suptitle(f"Behavior-level preservation @ K={kmin} — "
                  f"{args.dataset}/{args.order}")
     fig.tight_layout()
-    p2 = FIGURES / f"cl_jaccard_bars_{args.dataset}_{args.order}.png"
+    p2 = figure_dir / f"cl_jaccard_bars_{args.dataset}_{args.order}.png"
     fig.savefig(p2, dpi=160)
     print(f"fig -> {p2}")
 

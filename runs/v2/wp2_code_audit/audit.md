@@ -1,0 +1,21 @@
+# WP2 code audit (CPU)
+
+- `nav/__init__.py`: **PASS** — none
+- `nav/candata.py`: **PASS** — none
+- `nav/cl.py`: **PASS** — none
+- `nav/device.py`: **PASS** — none
+- `nav/engine.py`: **PASS** — none
+- `nav/models.py`: **PASS** — none
+- `nav/pilot40.py`: **PASS** — none
+- `scripts/aggregate_ablation.py`: **PASS** — none
+- `scripts/aggregate_results.py`: **PASS** — none
+- `scripts/cl_main.py`: **PASS** — none
+- `scripts/cl_navigation.py`: **PASS** — none
+- `scripts/expA_linear_probe.py`: **PASS** — none
+- `scripts/expB_budget_navigation.py`: **PASS** — none
+- `scripts/gate1_significance.py`: **PASS** — none
+- `scripts/gate1_single_task.py`: **PASS** — none
+- `scripts/make_fig1.py`: **PASS** — none
+- `scripts/prep_can_cache.py`: **PASS** — none
+- `scripts/wp1_paired_stats.py`: **PASS** — none
+- `scripts/wp2_code_audit.py`: **PASS** — none

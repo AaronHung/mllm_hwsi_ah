@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import argparse
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -160,6 +162,10 @@ def panel_b(ax):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--device", default="auto",
+                    help="accepted for common CLI; plotting remains CPU")
+    ap.parse_args()
     fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.0))
     panel_a(axes[0])
     panel_b(axes[1])

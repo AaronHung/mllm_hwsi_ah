@@ -1,0 +1,5 @@
+{
+  "resolved_device": "cpu",
+  "input_dir": "results",
+  "analysis": "paired bootstrap 95% CI"
+}

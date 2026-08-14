@@ -106,3 +106,21 @@
 ## 8. 版本記錄
 
 - v1（2026-08-14）：初版凍結。
+
+## 9. Infrastructure v2 addendum（不改變 Protocol-v1 科學定義）
+
+- **Backend consistency:** all seeds contributing to one results table
+  (`dataset × order × method × K`) must run on one backend. Do not mix Mac
+  MPS and RunPod CUDA within a table. Probe/mechanism runs may use Mac MPS;
+  the pilot40 five-seed grid is assigned to RunPod CUDA.
+- **Device resolution:** new entry points accept `--device auto`, resolved as
+  `cuda > mps > cpu`, and record `resolved_device` plus torch/fallback metadata.
+  MPS runs use float32; `PYTORCH_ENABLE_MPS_FALLBACK=1` is enabled for
+  unsupported operators.
+- **Output boundary:** Protocol-v1 files under `results/` and `figures/` are
+  frozen read-only evidence. Every new run writes under
+  `runs/v2/<run_tag>/` with a metadata file and coarse-grained checkpoints.
+  A rerun receives a new tag; it must never overwrite a Protocol-v1 result.
+- **Recovery:** a checkpoint records completed `(seed, method, K)` units after
+  their CSV rows are flushed. Reattach and rerun with `--resume`; completed
+  units are skipped and an interrupted unit is recomputed from its boundary.

@@ -25,6 +25,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from nav import add_device_argument, resolve_device  # noqa: E402
 from nav.candata import (CAN_ROOT, R_CLUSTERS, cohort_table,  # noqa: E402
                          projection_matrix)
 
@@ -65,7 +66,10 @@ def main():
                     default=["esca", "lung", "rcc", "brca"])
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--can-root", default=str(CAN_ROOT))
+    add_device_argument(ap)
     args = ap.parse_args()
+    device = resolve_device(args.device)
+    print(f"resolved device = {device} (cache preparation is CPU-bound)")
 
     projection_matrix(CACHE_ROOT)  # 先確保矩陣存在（避免多進程競態）
 

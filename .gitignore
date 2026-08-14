@@ -54,3 +54,13 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
+
+# ---- Protocol-v2 run artifacts (small CSV/JSON/Markdown/PNG/log only) ----
+!runs/
+!runs/v2/
+!runs/v2/**/
+!runs/v2/**/*.csv
+!runs/v2/**/*.json
+!runs/v2/**/*.md
+!runs/v2/**/*.png
+!runs/v2/**/*.log

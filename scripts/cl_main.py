@@ -29,7 +29,7 @@ import torch
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from nav import get_device  # noqa: E402
+from nav import add_device_argument, device_info, resolve_device  # noqa: E402
 from nav.candata import COHORTS, CanTask  # noqa: E402
 from nav.cl import (METHOD_KWARGS, build_buffer, eval_policy_balanced,  # noqa: E402
                     fisher_of, jaccard, kl_drift, policy_on_probes,
@@ -55,7 +55,8 @@ class TaskSpec:
 # ------------------------------------------------------------------ data
 def load_can_tasks(order: str, smoke: bool) -> list[TaskSpec]:
     tasks = []
-    for cohort in CAN_ORDERS[order]:
+    cohorts = CAN_ORDERS[order][:2] if smoke else CAN_ORDERS[order]
+    for cohort in cohorts:
         t = CanTask(cohort, CACHE_ROOT)
         banks = {sp: t.load_bank(sp) for sp in ["train", "val", "test"]}
         if smoke:
@@ -97,7 +98,8 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                  device, ev_epochs: int, nav_epochs: int,
                  lam: float, lam_ewc: float,
                  replay_per_slide: int = 2, buffer_cap: int = 512,
-                 eval_split: str = "test") -> list[dict]:
+                 eval_split: str = "test",
+                 run_meta: dict[str, object] | None = None) -> list[dict]:
     torch.manual_seed(seed)
     t_start = time.time()
 
@@ -181,7 +183,8 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                 jaccard=round(jac, 4), action_kl=round(drift, 4),
                 sel_utility=round(util, 4),
                 random_ref=round(random_ref[j], 4),
-                n_test=len(bank_j), wall_s=round(time.time() - t_start, 1)))
+                n_test=len(bank_j), wall_s=round(time.time() - t_start, 1),
+                **(run_meta or {})))
     return rows
 
 
@@ -200,16 +203,31 @@ def main():
     ap.add_argument("--buffer-cap", type=int, default=512)
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--tag", default=None)
+    add_device_argument(ap)
+    ap.add_argument("--output-dir", type=Path, default=None,
+                    help="new-run directory; defaults to runs/v2/<tag>")
+    ap.add_argument("--resume", action="store_true",
+                    help="skip completed seed/method/K checkpoints in output-dir")
     ap.add_argument("--select-ewc-lambda", action="store_true")
     args = ap.parse_args()
 
-    device = get_device()
-    print(f"device = {device}")
+    device = resolve_device(args.device)
+    meta = device_info(args.device, device).as_dict()
+    meta["resolved_device"] = meta.pop("resolved")
+    meta["run_tag"] = args.tag or ("smoke" if args.smoke else "full")
+    tag = meta["run_tag"]
+    out_dir = (Path(args.output_dir) if args.output_dir is not None
+               else REPO / "runs" / "v2" / tag)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "metadata.json").write_text(json.dumps(
+        meta, indent=2, ensure_ascii=False))
+    print(f"device = {device} | torch = {meta['torch_version']} | "
+          f"MPS fallback = {meta['mps_fallback']}")
 
     if args.smoke:
         args.methods = ["seqft", "ours"] if args.methods == ap.get_default(
             "methods") else args.methods
-        args.budgets = [2]
+        args.budgets = [1]
         args.seeds = [0]
         ev_epochs, nav_epochs = 5, 2
     elif args.dataset == "can":
@@ -218,7 +236,7 @@ def main():
         ev_epochs, nav_epochs = 60, 30
 
     # EWC λ：val 選擇模式 or 讀取既有選擇
-    lam_ewc_path = RESULTS / "ewc_lambda.json"
+    lam_ewc_path = out_dir / "ewc_lambda.json"
     if args.select_ewc_lambda:
         assert args.dataset == "can", "λ 選擇依 protocol 只在 can 的 val 上做"
         tasks = load_can_tasks("main", smoke=False)[:2]  # T1→T2
@@ -226,13 +244,12 @@ def main():
         for lam_ewc in [10.0, 100.0, 1000.0]:
             rows = run_sequence(tasks, "ewc", seed=0, k=2, device=device,
                                 ev_epochs=ev_epochs, nav_epochs=nav_epochs,
-                                lam=args.lam, lam_ewc=lam_ewc,
-                                eval_split="val")
+                                lam=args.lam, lam_ewc=lam_ewc, eval_split="val",
+                                run_meta=meta)
             aa = np.mean([r["bal_acc"] for r in rows if r["stage"] == 2])
             print(f"[ewc-select] λ={lam_ewc}: val AA(after T2) = {aa:.4f}")
             if best is None or aa > best[1]:
                 best = (lam_ewc, aa)
-        RESULTS.mkdir(exist_ok=True)
         lam_ewc_path.write_text(json.dumps(
             {"lam_ewc": best[0], "val_aa": round(float(best[1]), 4)}))
         print(f"selected λ_ewc = {best[0]} -> {lam_ewc_path}")
@@ -243,9 +260,11 @@ def main():
         lam_ewc = json.loads(lam_ewc_path.read_text())["lam_ewc"]
     print(f"λ_ewc = {lam_ewc}")
 
-    tag = args.tag or ("smoke" if args.smoke else "full")
-    out_csv = RESULTS / f"cl_main_{args.dataset}_{args.order}_{tag}.csv"
-    RESULTS.mkdir(exist_ok=True)
+    out_csv = out_dir / f"cl_main_{args.dataset}_{args.order}_{tag}.csv"
+    checkpoint_path = out_dir / "checkpoints.json"
+    completed: set[str] = set()
+    if args.resume and checkpoint_path.exists():
+        completed = set(json.loads(checkpoint_path.read_text()).get("completed", []))
 
     if args.dataset == "can":
         tasks_fixed = load_can_tasks(args.order, args.smoke)
@@ -256,15 +275,24 @@ def main():
             load_pilot_tasks(seed, args.smoke)
         for method in args.methods:
             for k in args.budgets:
+                key = f"seed={seed}|method={method}|K={k}"
+                if key in completed:
+                    print(f"[resume] skip {key}")
+                    continue
                 rows = run_sequence(tasks, method, seed, k, device,
                                     ev_epochs, nav_epochs,
                                     args.lam, lam_ewc,
-                                    args.replay_per_slide, args.buffer_cap)
+                                    args.replay_per_slide, args.buffer_cap,
+                                    run_meta=meta)
                 for r in rows:
                     r.update(dataset=args.dataset, order=args.order)
                 df = pd.DataFrame(rows)
                 header = not out_csv.exists()
                 df.to_csv(out_csv, mode="a", header=header, index=False)
+                completed.add(key)
+                checkpoint_path.write_text(json.dumps(
+                    {"completed": sorted(completed), "metadata": meta},
+                    indent=2, ensure_ascii=False))
                 fin = [r for r in rows if r["stage"] == len(tasks)]
                 aa = np.mean([r["bal_acc"] for r in fin])
                 jac1 = fin[0]["jaccard"]

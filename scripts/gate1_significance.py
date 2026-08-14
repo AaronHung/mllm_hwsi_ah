@@ -17,6 +17,7 @@ Part B  can_dataset 單任務（esca 與 rcc）：5 seeds、固定 fold_1 split
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -28,7 +29,7 @@ import torch
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from nav import get_device  # noqa: E402
+from nav import add_device_argument, device_info, resolve_device  # noqa: E402
 from nav.candata import CanTask  # noqa: E402
 from nav.engine import (build_bank, eval_policy, evidence_of,  # noqa: E402
                         rollout_policy, teacher_rollout, train_evaluator,
@@ -94,7 +95,7 @@ def part_a_pilot(budgets, seeds, device, ev_epochs, nav_epochs, n_folds):
                                        for rs in range(5)]))
                 rows.append(dict(dataset="pilot40", seed=seed, fold=fold_i,
                                  K=k, learned=acc_l, random=acc_r,
-                                 uniform=acc_u))
+                                 uniform=acc_u, resolved_device=str(device)))
                 print(f"[pilot40 seed{seed} fold{fold_i} K={k}] "
                       f"learned={acc_l:.3f} random={acc_r:.3f} "
                       f"uniform={acc_u:.3f} ({time.time() - t0:.0f}s)")
@@ -132,7 +133,8 @@ def part_b_can(cohorts, budgets, seeds, device, ev_epochs, nav_epochs, smoke):
                 for sid in corr_l:
                     rows.append(dict(dataset=f"can_{cohort}", seed=seed, K=k,
                                      sid=sid, learned=corr_l[sid],
-                                     random=corr_r[sid]))
+                                     random=corr_r[sid],
+                                     resolved_device=str(device)))
                 print(f"[can_{cohort} seed{seed} K={k}] "
                       f"learned={np.mean(list(corr_l.values())):.3f} "
                       f"random={np.mean(list(corr_r.values())):.3f} "
@@ -140,7 +142,9 @@ def part_b_can(cohorts, budgets, seeds, device, ev_epochs, nav_epochs, smoke):
     return pd.DataFrame(rows)
 
 
-def analyze(df_a: pd.DataFrame, df_b: pd.DataFrame, budgets) -> str:
+def analyze(df_a: pd.DataFrame, df_b: pd.DataFrame, budgets,
+            results_dir: Path = RESULTS,
+            figures_dir: Path = FIGURES) -> str:
     from scipy.stats import wilcoxon
     lines = ["# Gate 1 顯著性分析（protocol G1'）", ""]
     stats_rows = []
@@ -203,9 +207,10 @@ def analyze(df_a: pd.DataFrame, df_b: pd.DataFrame, budgets) -> str:
         ax.set_title(f"{name}\nlearned − random (95% CI)")
         ax.set_ylabel("accuracy difference")
     fig.tight_layout()
-    FIGURES.mkdir(exist_ok=True)
-    fig.savefig(FIGURES / "gate1_ci.png", dpi=160)
-    st.to_csv(RESULTS / "gate1_hardened_stats.csv", index=False)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(figures_dir / "gate1_ci.png", dpi=160)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    st.to_csv(results_dir / "gate1_hardened_stats.csv", index=False)
     return "\n".join(lines)
 
 
@@ -214,28 +219,38 @@ def main():
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--budgets", type=int, nargs="+", default=[1, 2, 4])
     ap.add_argument("--cohorts", nargs="+", default=["esca", "rcc"])
+    add_device_argument(ap)
+    ap.add_argument("--output-dir", type=Path, default=None,
+                    help="new-run directory; defaults to runs/v2/<tag>")
     args = ap.parse_args()
 
-    device = get_device()
-    print(f"device = {device}")
+    device = resolve_device(args.device)
+    meta = device_info(args.device, device).as_dict()
+    print(f"device = {device} | torch = {meta['torch_version']} | "
+          f"MPS fallback = {meta['mps_fallback']}")
     seeds = [0] if args.smoke else [0, 1, 2, 3, 4]
     budgets = [2] if args.smoke else args.budgets
     ev_p, nav_p = (15, 8) if args.smoke else (60, 30)      # pilot40
     ev_c, nav_c = (5, 2) if args.smoke else (30, 10)       # can
     n_folds = 5
+    tag = "smoke" if args.smoke else "full"
+    out_dir = (Path(args.output_dir) if args.output_dir is not None
+               else REPO / "runs" / "v2" / f"gate1_significance_{tag}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "metadata.json").write_text(
+        json.dumps(meta, indent=2, ensure_ascii=False))
 
     df_a = part_a_pilot(budgets, seeds, device, ev_p, nav_p, n_folds)
     df_b = part_b_can(args.cohorts, budgets, seeds, device, ev_c, nav_c,
                       args.smoke)
-    RESULTS.mkdir(exist_ok=True)
-    tag = "smoke" if args.smoke else "full"
     pd.concat([df_a.assign(kind="pilot_folds"),
                df_b.assign(kind="can_slides")]).to_csv(
-        RESULTS / f"gate1_hardened_{tag}.csv", index=False)
+        out_dir / f"gate1_hardened_{tag}.csv", index=False)
 
     if not args.smoke:
-        md = analyze(df_a, df_b, budgets)
-        (RESULTS / "gate1_significance.md").write_text(md)
+        md = analyze(df_a, df_b, budgets, results_dir=out_dir,
+                     figures_dir=out_dir / "figures")
+        (out_dir / "gate1_significance.md").write_text(md)
         print(md)
 
 

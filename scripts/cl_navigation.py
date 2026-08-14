@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import sys
 import time
 from pathlib import Path
@@ -39,7 +40,7 @@ import torch.nn.functional as F
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from nav import get_device  # noqa: E402
+from nav import add_device_argument, device_info, resolve_device  # noqa: E402
 from nav.engine import (build_bank, eval_policy, teacher_rollout,  # noqa: E402
                         train_evaluator, train_navigator)
 from nav.pilot40 import Pilot40  # noqa: E402
@@ -149,10 +150,15 @@ def main():
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--k", type=int, default=4)
     ap.add_argument("--lam", type=float, default=1.0)
+    add_device_argument(ap)
+    ap.add_argument("--output-dir", type=Path, default=None,
+                    help="new-run directory; defaults to runs/v2/<tag>")
     args = ap.parse_args()
 
-    device = get_device()
-    print(f"device = {device}")
+    device = resolve_device(args.device)
+    meta = device_info(args.device, device).as_dict()
+    print(f"device = {device} | torch = {meta['torch_version']} | "
+          f"MPS fallback = {meta['mps_fallback']}")
     ds = Pilot40(REPO / "data")
 
     seeds = [0] if args.smoke else [0, 1, 2]
@@ -166,6 +172,9 @@ def main():
             r = run_method(method, ds, args.k, seed, device,
                            ev_epochs, nav_epochs, lam=args.lam)
             rows.append(r)
+            r.update(resolved_device=str(device),
+                     torch_version=meta["torch_version"],
+                     mps_fallback=meta["mps_fallback"])
             print(f"[{method} seed{seed}] T1 {r['t1_acc_before']:.3f} -> "
                   f"{r['t1_acc_after']:.3f} (forget {r['forgetting']:+.3f}) | "
                   f"T2 {r['t2_acc']:.3f} | drift KL {r['action_kl_drift']:.3f} | "
@@ -173,9 +182,13 @@ def main():
 
     import pandas as pd
     df = pd.DataFrame(rows)
-    RESULTS.mkdir(exist_ok=True)
     tag = "smoke" if args.smoke else "full"
-    df.to_csv(RESULTS / f"cl_navigation_{tag}.csv", index=False)
+    out_dir = (Path(args.output_dir) if args.output_dir is not None
+               else REPO / "runs" / "v2" / f"cl_navigation_{tag}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "metadata.json").write_text(
+        json.dumps(meta, indent=2, ensure_ascii=False))
+    df.to_csv(out_dir / f"cl_navigation_{tag}.csv", index=False)
 
     agg = df.groupby("method")[["t1_acc_before", "t1_acc_after", "forgetting",
                                 "t2_acc", "action_kl_drift",
@@ -196,7 +209,7 @@ def main():
         summary.append(f"**Gate 3（forgetting 明顯下降）：distill forgetting = "
                        f"{f_dis:+.3f}（Δ = {f_seq - f_dis:+.3f}）→ "
                        f"{'PASS' if f_dis < f_seq else 'FAIL'}**")
-        (RESULTS / "cl_navigation_summary.md").write_text("\n".join(summary))
+        (out_dir / "cl_navigation_summary.md").write_text("\n".join(summary))
         print("\n".join(summary[-2:]))
 
 
