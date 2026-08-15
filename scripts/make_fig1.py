@@ -145,11 +145,12 @@ def panel_b(ax):
         "$(F_{low}, E_t, b_t, \\mathrm{gain}, u)$ — no raw images",
         C_CL, C_CL_E, fs=8)
     box(ax, 5.15, 1.5, 4.55, 1.9,
-        "Utility-Weighted Replay Distillation\n"
+        "Replay + policy-fidelity distillation (family)\n"
         "$\\lambda \\sum_{s \\in \\mathcal{M}} w(s)\\,"
         "\\mathrm{KL}(\\pi_\\theta \\| \\pi_{old})$\n"
-        "$w(s) \\propto u(s) = \\max_r \\mathrm{gain}(r|E_s)$",
-        C_CL, C_CL_E, fs=8)
+        "$w(s){=}1$ uniform;  $w(s) \\propto u(s){=}\\max_r \\mathrm{gain}(r|E_s)$ "
+        "for the utility-weighted variant",
+        C_CL, C_CL_E, fs=7.6)
     arrow(ax, (2.5, 3.4), (2.5, 4.15), "store at end of each task", color=C_CL_E,
           ls="--", tx=1.35, ty=3.8)
     arrow(ax, (7.4, 3.4), (7.4, 4.15), "regularize while learning new task",
