@@ -1,0 +1,6 @@
+[launch] order=main seed=0
+[launch] order=main seed=1
+[launch] order=main seed=2
+[launch] order=main seed=3
+[launch] order=main seed=4
+all shards done.

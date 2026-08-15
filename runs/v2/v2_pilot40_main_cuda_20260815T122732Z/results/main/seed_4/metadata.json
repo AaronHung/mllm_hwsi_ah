@@ -1,0 +1,12 @@
+{
+  "requested": "auto",
+  "torch_version": "2.4.1+cu124",
+  "cuda_available": true,
+  "mps_available": false,
+  "mps_fallback": "1",
+  "resolved_device": "cuda",
+  "run_tag": "v2_pilot40_main_cuda_20260815T122732Z_main_s4",
+  "git_commit": "09a3ac4551c0efe1421f6eab51caeb2def2c7eed",
+  "hostname": "1f523c46ed83",
+  "command": "scripts/cl_main.py --dataset pilot40 --order main --seeds 4 --tag v2_pilot40_main_cuda_20260815T122732Z_main_s4 --device auto --output-dir /workspace/mllm_hwsi_ah/runs/v2/v2_pilot40_main_cuda_20260815T122732Z/results/main/seed_4 --resume"
+}

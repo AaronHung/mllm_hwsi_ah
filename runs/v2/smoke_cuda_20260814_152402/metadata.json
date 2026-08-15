@@ -1,0 +1,9 @@
+{
+  "requested": "cuda",
+  "torch_version": "2.4.1+cu124",
+  "cuda_available": true,
+  "mps_available": false,
+  "mps_fallback": "1",
+  "resolved_device": "cuda",
+  "run_tag": "smoke_cuda_20260814_152402"
+}

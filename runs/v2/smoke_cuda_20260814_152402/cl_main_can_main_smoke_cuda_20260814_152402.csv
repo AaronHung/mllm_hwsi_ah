@@ -1,0 +1,7 @@
+method,seed,K,stage,task,task_idx,bal_acc,acc,jaccard,action_kl,sel_utility,random_ref,n_test,wall_s,requested,torch_version,cuda_available,mps_available,mps_fallback,resolved_device,run_tag,dataset,order
+seqft,0,1,1,esca,1,1.0,1.0,1.0,-0.0,0.639,0.7667,12,2.9,cuda,2.4.1+cu124,True,False,1,cuda,smoke_cuda_20260814_152402,can,main
+seqft,0,1,2,esca,1,0.9167,0.9167,0.3333,0.1921,0.4998,0.7667,12,3.1,cuda,2.4.1+cu124,True,False,1,cuda,smoke_cuda_20260814_152402,can,main
+seqft,0,1,2,lung,2,0.8333,0.8333,1.0,0.0,0.3473,0.6167,12,3.1,cuda,2.4.1+cu124,True,False,1,cuda,smoke_cuda_20260814_152402,can,main
+ours,0,1,1,esca,1,1.0,1.0,1.0,-0.0,0.639,0.7667,12,0.3,cuda,2.4.1+cu124,True,False,1,cuda,smoke_cuda_20260814_152402,can,main
+ours,0,1,2,esca,1,1.0,1.0,0.3333,0.0329,0.6412,0.7667,12,0.5,cuda,2.4.1+cu124,True,False,1,cuda,smoke_cuda_20260814_152402,can,main
+ours,0,1,2,lung,2,0.8333,0.8333,1.0,-0.0,0.2792,0.6167,12,0.5,cuda,2.4.1+cu124,True,False,1,cuda,smoke_cuda_20260814_152402,can,main

@@ -1,0 +1,37 @@
+{
+  "completed": [
+    "seed=1|method=distill|K=1",
+    "seed=1|method=distill|K=2",
+    "seed=1|method=distill|K=4",
+    "seed=1|method=ewc|K=1",
+    "seed=1|method=ewc|K=2",
+    "seed=1|method=ewc|K=4",
+    "seed=1|method=joint|K=1",
+    "seed=1|method=joint|K=2",
+    "seed=1|method=joint|K=4",
+    "seed=1|method=lwf|K=1",
+    "seed=1|method=lwf|K=2",
+    "seed=1|method=lwf|K=4",
+    "seed=1|method=ours|K=1",
+    "seed=1|method=ours|K=2",
+    "seed=1|method=ours|K=4",
+    "seed=1|method=replay|K=1",
+    "seed=1|method=replay|K=2",
+    "seed=1|method=replay|K=4",
+    "seed=1|method=seqft|K=1",
+    "seed=1|method=seqft|K=2",
+    "seed=1|method=seqft|K=4"
+  ],
+  "metadata": {
+    "requested": "auto",
+    "torch_version": "2.4.1+cu124",
+    "cuda_available": true,
+    "mps_available": false,
+    "mps_fallback": "1",
+    "resolved_device": "cuda",
+    "run_tag": "v2_pilot40_main_cuda_20260815T122732Z_main_s1",
+    "git_commit": "09a3ac4551c0efe1421f6eab51caeb2def2c7eed",
+    "hostname": "1f523c46ed83",
+    "command": "scripts/cl_main.py --dataset pilot40 --order main --seeds 1 --tag v2_pilot40_main_cuda_20260815T122732Z_main_s1 --device auto --output-dir /workspace/mllm_hwsi_ah/runs/v2/v2_pilot40_main_cuda_20260815T122732Z/results/main/seed_1 --resume"
+  }
+}

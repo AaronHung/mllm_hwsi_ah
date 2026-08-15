@@ -1,0 +1,5 @@
+device = cuda | torch = 2.4.1+cu124 | MPS fallback = 1
+λ_ewc = 100.0
+[seqft seed0 K=1] AA=0.917 T1(bal=0.833, jac=0.00, kl=0.021) (11s)
+[ours seed0 K=1] AA=0.750 T1(bal=0.833, jac=0.50, kl=0.005) (11s)
+done -> /workspace/mllm_hwsi_ah/runs/v2/v2_pilot40_rehearsal_cuda_20260815T120941Z/results/cl_main_pilot40_main_v2_pilot40_rehearsal_cuda_20260815T120941Z.csv

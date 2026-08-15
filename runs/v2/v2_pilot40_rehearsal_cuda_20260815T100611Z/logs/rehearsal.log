@@ -1,0 +1,14 @@
+device = cuda | torch = 2.4.1+cu124 | MPS fallback = 1
+λ_ewc = 100.0
+Traceback (most recent call last):
+  File "/workspace/mllm_hwsi_ah/scripts/cl_main.py", line 376, in <module>
+    main()
+  File "/workspace/mllm_hwsi_ah/scripts/cl_main.py", line 337, in main
+    load_pilot_tasks(seed, args.smoke)
+  File "/workspace/mllm_hwsi_ah/scripts/cl_main.py", line 97, in load_pilot_tasks
+    ds = Pilot40(REPO / "data")
+         ^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/mllm_hwsi_ah/nav/pilot40.py", line 48, in __init__
+    with open(csv_path) as f:
+         ^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/workspace/mllm_hwsi_ah/data/pilot40_selection.csv'
