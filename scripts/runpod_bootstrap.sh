@@ -104,9 +104,19 @@ EOF
 __mllm_git_branch() { git symbolic-ref --short HEAD 2>/dev/null; }
 export PS1='\[\033[1;33m\]\u\[\033[0m\] \[\033[2m\]|\[\033[0m\] \[\033[1;36m\]\w\[\033[0m\]\[\033[35m\]$(b=$(__mllm_git_branch); [ -n "$b" ] && printf " (%s)" "$b")\[\033[0m\]\n\$ '
 PSEOF
-    # The identity is local to this clone; no credential/token is written.
+    # The identity is local to this clone; no credential/token is written here.
     git -C "$PROJECT_DIR" config user.name "$git_name"
     git -C "$PROJECT_DIR" config user.email "$git_email"
+    # Point the HTTPS credential cache at $STATE_DIR (under /workspace) instead
+    # of the default ~/.git-credentials (under $HOME, wiped on every fresh
+    # container). This only configures *where* a credential would be cached —
+    # it does not write one. The first `git push`/`pull` on a brand-new
+    # container/volume still needs a GitHub username + Personal Access Token
+    # (GitHub has not accepted account passwords for git-over-HTTPS since
+    # 2021) entered once interactively; after that, since the cache file lives
+    # on the persistent volume, later pods reusing this same volume skip the
+    # prompt entirely.
+    git -C "$PROJECT_DIR" config credential.helper "store --file=$STATE_DIR/.git-credentials"
     # shellcheck disable=SC1090
     source "$ENV_FILE"
     echo "[bootstrap] env=$ENV_FILE"

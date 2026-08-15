@@ -148,7 +148,19 @@ echo "commit=$(git rev-parse HEAD)"
 
 **預期結果**：`commit` 應該是 `4ac6953...`（v0.33.3），`cuda True`。
 
-- 如果 `git pull` 跳出要你輸入帳號密碼／token：這代表這個新容器沒有存 git 憑證（憑證通常存在 `$HOME`，不在 `/workspace`，所以會被清掉）。回報給我，我給你一個用 PAT（personal access token）的一行指令重新設定。
+- 如果 `git pull`／`git push` 跳出要你輸入帳號密碼／token：這代表這個新容器沒有存 git 憑證（憑證通常存
+  在 `$HOME`，不在 `/workspace`，所以會被清掉），而且 GitHub 從 2021 年起 git-over-HTTPS 不再接受帳號
+  密碼，只吃 **Personal Access Token（PAT）**。bootstrap 已經把憑證快取位置指到
+  `$STATE_DIR/.git-credentials`（在 `/workspace` 底下，持久），所以只要**在同一顆 volume 上輸入過一次
+  PAT，之後所有新開的 pod（只要掛同一顆 volume）都不會再問**。第一次輸入：
+  1. 到 <https://github.com/settings/tokens?type=beta> 建一個 fine-grained token，repository 選這個
+     repo，Permissions → Contents 設成 Read and write，產生後立刻複製（只顯示一次）。
+  2. 貼這行（一次性，之後就不用再打）：
+     ```bash
+     git push origin main
+     ```
+     跳出 `Username` 填 GitHub 帳號，跳出 `Password` **貼 PAT**（不是真正密碼）。成功後憑證就存進
+     `$STATE_DIR/.git-credentials`，之後不會再問。
 
 ## 第 4 步：確認有沒有殘留的 tmux session
 
