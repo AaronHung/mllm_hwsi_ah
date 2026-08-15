@@ -8,7 +8,12 @@ All tensors in the navigation package are expected to remain float32.
 from __future__ import annotations
 
 import os
+import shlex
+import socket
+import subprocess
+import sys
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Literal
 
 # PyTorch reads this variable when MPS is initialized.  Set it before import.
@@ -17,6 +22,7 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 import torch
 
 DevicePreference = Literal["auto", "cuda", "mps", "cpu"]
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)
@@ -91,6 +97,31 @@ def device_info(
         mps_available=bool(torch.backends.mps.is_available()),
         mps_fallback=os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK", ""),
     )
+
+
+def run_provenance() -> dict[str, str]:
+    """Process-level provenance for run manifests (v0.33.3 item E5 /
+    ``docs/compute_policy.md`` rule 5): git commit, machine hostname, and the
+    exact command line that launched this process. Merge the result into any
+    ``metadata.json`` / ``checkpoints.json`` dict alongside ``device_info``'s
+    backend/torch fields. Best-effort — never raises, since provenance
+    logging must not be able to crash a training run.
+    """
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=_REPO_ROOT,
+            text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        commit = "unknown"
+    try:
+        host = socket.gethostname()
+    except Exception:
+        host = "unknown"
+    return {
+        "git_commit": commit,
+        "hostname": host,
+        "command": " ".join(shlex.quote(a) for a in sys.argv),
+    }
 
 
 def add_device_argument(parser):

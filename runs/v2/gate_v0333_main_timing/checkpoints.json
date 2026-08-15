@@ -1,0 +1,27 @@
+{
+  "completed": [
+    "seed=0|method=eq_pres|K=2"
+  ],
+  "metadata": {
+    "requested": "mps",
+    "torch_version": "2.12.0",
+    "cuda_available": false,
+    "mps_available": true,
+    "mps_fallback": "1",
+    "resolved_device": "mps",
+    "run_tag": "gate_v0333_main",
+    "git_commit": "a4bce9c64dbd42def619b44a24794bc0ef63f21f",
+    "hostname": "aaron-mac.local",
+    "command": "scripts/run_method_gate.py --device mps --tag gate_v0333_main --timing-only"
+  },
+  "last_unit": {
+    "method": "eq_pres",
+    "seed": 0,
+    "K": 2,
+    "status": "done",
+    "seconds": 350.9,
+    "git_commit": "a4bce9c64dbd42def619b44a24794bc0ef63f21f",
+    "backend": "mps",
+    "torch_version": "2.12.0"
+  }
+}

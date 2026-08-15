@@ -1,10 +1,18 @@
-# Method gate v0.33.2 — pre-registration
+# Method gate v0.33.3 — pre-registration
 
-**Status:** committed BEFORE any gate training run (v0.33.2 revision r1
+**Status:** committed BEFORE any gate training run (v0.33.3 revision r1
 applies — see Changelog; no gate training has been run under any definition
-of M1 as of this commit). Pre-registration discipline: this file is
-immutable once any gate result below has been read by anyone (r3); further
-changes require a new gate version, reported as such.
+of M1, and under no backend design, as of this commit). Pre-registration
+discipline: this file is immutable once any gate result below has been read
+by anyone (r3); further changes require a new gate version, reported as
+such.
+
+**v0.33.3 in one line:** a backend-reproduction audit (§5.2) found the
+method-gate's originally planned "CUDA new methods vs. MPS frozen
+baselines" comparison would confound method effect with backend effect;
+§5.4/§5.5 below redesign the gate as **MPS-first, same-backend
+throughout** — no comparator retraining needed. No formula, threshold,
+seed, K, or order changed from v0.33.2.
 
 **Parent direction:** v0.32 — Continual Budgeted Evidence Acquisition
 (analysis-centric, frozen).
@@ -209,23 +217,30 @@ utility_weight=False`) so the gate isolates exactly M1 and/or M2.
 | `samp_drift_only` (mini-arm) | importance, α=0 (drift-only) | KL (unchanged) | {0,1,2} | {1} | main |
 
 Baselines are the **frozen Protocol-v1 rows** for `ours_uniform` and
-`distill` (`results/cl_main_can_main_full_s*.csv`) and `replay` — never
-rerun; new runs are paired seed-by-seed against these frozen CSVs.
+`distill` (`results/cl_main_can_main_full_s*.csv` /
+`results/cl_main_can_main_ablA1_s*.csv`) and `replay` — never rerun; new
+runs are paired seed-by-seed against these frozen CSVs. **Under the v0.33.3
+MPS-first backend design (§5.4), these frozen rows plus the already-passing
+`util_regen` MPS backfill (§5.2) ARE the same-backend comparators — no
+comparator retraining, CUDA or otherwise, is needed for the gate verdict.**
 
-Launch command (RunPod CUDA, inside `tmux`, fresh run tag, checkpoints ON,
-per `docs/RUNPOD_SOP.md`; also writes real per-stage navigator weights under
-`runs/v2/<tag>/ckpt/`, §5.2):
+Launch command (Mac MPS, inside `tmux`, `caffeinate`, fresh run tag,
+checkpoints ON, per v0.33.3 §5.4/§5.6; writes real per-stage navigator
+weights under `runs/v2/<tag>/ckpt/`, §5.3):
 
 ```bash
-python scripts/cl_main.py --dataset can --order main \
-  --methods ia_samp eq_pres ia_ep samp_util_only samp_drift_only \
-  --seeds 0 1 2 --budgets 1 2 4 --device auto \
-  --tag method_gate_v0332_<run_tag> --resume \
-  2>&1 | tee logs/method_gate_v0332_<run_tag>.log
+tmux new -s gate
+caffeinate -i python scripts/run_method_gate.py --device mps \
+  --tag method_gate_v0333_<run_tag> --resume \
+  2>&1 | tee logs/method_gate_v0333_<run_tag>.log
+# Ctrl-b d to detach; tmux attach -t gate to reattach.
 ```
 
-(`samp_util_only`/`samp_drift_only` only need `--budgets 1`; run them in a
-separate invocation to avoid wasting compute on `K∈{2,4}` for the mini-arms.)
+`scripts/run_method_gate.py` (v0.33.3 item D) pins the exact grid above —
+27 main-config units (`ia_samp`/`eq_pres`/`ia_ep` x seeds x `K∈{1,2,4}`) plus
+6 mini-arm units (`samp_util_only`/`samp_drift_only` x seeds, `K=1` only) —
+into one resumable invocation, instead of the two hand-split `cl_main.py`
+calls used in earlier drafts of this document.
 
 ### 5.1 Utility-axis metrics (v0.33.2 items 2–3)
 
@@ -296,11 +311,18 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 python scripts/cl_main.py --dataset can --order ma
   `eps_optimal_mass`/`normalized_regret` admitted as g2 comparator values.
 - **Frozen tables are never replaced** — `runs/v2/util_regen_<run_tag>/` is a
   separate artifact, used only to extract the two new columns.
-- **Cross-backend pairing convention:** gate-arm utility values are produced
-  on CUDA (RunPod), comparator utility values on MPS (Mac) — this is the
-  same convention already used for every other cross-backend comparison
-  against the frozen baseline rows in this project (`docs/protocol.md`
-  "Backend consistency" note), not a new exception invented for this metric.
+- **Superseded by v0.33.3 (see §5.4/§5.5 below):** the sentence that used to
+  stand here described a "gate-arm utility on CUDA vs. comparator utility on
+  MPS" cross-backend pairing. That plan is retracted. It is exactly the
+  Δ=0.148 CPU-vs-MPS discrepancy discovered while producing *this section's
+  own* MPS regen (immediately above) that triggered the redesign: if CPU vs.
+  MPS diverges by 150x tolerance, an untested MPS-vs-CUDA gap cannot be
+  assumed negligible either. The gate now runs entirely on MPS — see §5.4 —
+  so both gate-arm and comparator utility values are same-backend (MPS) by
+  construction; the CUDA/MPS pairing convention below no longer applies to
+  this section (it may still describe how `pilot40`'s independent table
+  relates to `can`'s, which is a different, already-legitimate case of
+  "different dataset, different self-contained table").
 
 ### 5.3 Real model checkpoints (v0.33.2 item 4)
 
@@ -314,6 +336,68 @@ by definition the final navigator), under
 that whichever config passes the gate can be probed with the same mechanism
 analysis already used in WP4 (`scripts/mechanism_probe.py`) without needing
 to retrain.
+
+### 5.4 Backend design (v0.33.3 item B — supersedes the CUDA-matched plan)
+
+Track-B gate runs **entirely on Mac MPS**, not RunPod CUDA. Under
+same-backend matching, the comparators are:
+
+- the **frozen Protocol-v1 MPS rows** (capability/behavior axis — AA,
+  Forgetting, Jaccard, action-KL — at all `K∈{1,2,4}`), and
+- the **bit-exact MPS `util_regen`** backfill from §5.2 (utility axis —
+  `eps_optimal_mass`/`normalized_regret` — at `K∈{1,2}`, which is exactly
+  what g2 requires: "at `K=1` or `K=2`").
+
+**No comparator retraining of any kind is required** — this is strictly
+cheaper and cleaner than the CUDA-matched plan that was floated between the
+first Cursor report and this revision (which would have required rerunning
+`ours_uniform`/`distill`/`replay` on CUDA as well: 60 total runs vs. this
+design's 33).
+
+Gate compute is **only the 33 new runs**: `ia_samp`/`eq_pres`/`ia_ep` x
+seeds `{0,1,2}` x `K∈{1,2,4}` (27) + the two mini-arms x seeds `{0,1,2}` x
+`K=1` (6), main order, inline utility metrics (§5.1), stage-boundary
+`torch.save` (§5.3), fresh `runs/v2/<tag>/` tag. Run via
+`scripts/run_method_gate.py` (§5, item D).
+
+**WP5 `pilot40` runs on RunPod CUDA in parallel, unaffected by this
+redesign.** It is a self-contained table (its own dataset, never previously
+run on any backend, so there is no frozen-row comparator to backend-match
+against) — the compute-policy rule that applies is "one table, one
+backend," which a from-scratch CUDA `pilot40` table satisfies on its own.
+Note the backend in `pilot40`'s table header.
+
+### 5.5 Timing decision rule (v0.33.3 item C — executed, recorded)
+
+Pre-registered rule: run one representative unit (`eq_pres`, seed 0, `K=2`)
+on MPS with `caffeinate`; `T_total = 33 * t_unit * 1.15`. If `T_total <=
+48h` active compute, proceed all-MPS immediately, no further approval
+needed; if `> 48h`, stop and fall back to the CUDA-matched plan (rerun
+`ours_uniform`/`distill`/`replay` as CUDA comparators after all).
+
+**Result (2026-08-15, `runs/v2/gate_v0333_main_timing/`, commit
+`a4bce9c`):** `t_unit = 351s` (`eq_pres` seed 0, `K=2`, Mac MPS, `torch
+2.12.0`). `T_total = 33 * 351s * 1.15 = 3.70h`. **3.70h <= 48h -> proceed
+all-MPS, per the pre-registered rule.** No CUDA fallback triggered. This
+decision was reached automatically per the rule above, before any gate
+result was read, and is not subject to further approval.
+
+### 5.6 Runner (v0.33.3 item D)
+
+`scripts/run_method_gate.py` fixes the 33-unit grid above into one
+resumable invocation (reusing `scripts.cl_main.run_sequence`, so all
+per-row behavior — inline utility columns, `torch.save` checkpoints,
+per-refresh diagnostics — is identical to `cl_main.py`). After each
+(method, seed, K) unit: CSV rows are appended, the navigator checkpoint is
+on disk, and `checkpoints.json` is rewritten with a per-unit manifest entry
+(`method`, `seed`, `K`, `status`, `git_commit`, `backend`, `torch_version`,
+wall-clock seconds — via `nav.device.run_provenance()`) *before* the next
+unit starts. Safe to `Ctrl-C` between units (never mid-unit) and continue
+later with `--resume`. Launch pattern: `tmux new -s gate; caffeinate -i
+python scripts/run_method_gate.py --device mps --tag <tag> --resume`.
+`tmux` is session persistence only, **not** sleep prevention — keep the
+lid open and the machine on power for the duration of a run; safe-stop
+(finish the current unit, do not kill mid-unit) before moving the machine.
 
 ## 6. Pre-registered PASS criteria
 
@@ -364,11 +448,13 @@ is the automated check).
 ## 8. Run-handling rules
 
 - **r1.** If gate runs have NOT started under any superseded (§2.1, §2.2)
-  definition: apply the pending patch, bump this document with a dated
-  changelog entry stating the amendment precedes any result readout, then
-  launch. **This is the branch that applies here** — no gate training has
-  been run under any definition of M1 (neither §2.1 nor §2.2) before this
-  v0.33.2 revision was committed.
+  definition, or under any superseded backend design: apply the pending
+  patch, bump this document with a dated changelog entry stating the
+  amendment precedes any result readout, then launch. **This is the branch
+  that applies here** — no gate training has been run under any definition
+  of M1 (neither §2.1 nor §2.2), and no gate training has been run under the
+  originally-floated CUDA-matched backend design (superseded by §5.4/§5.5),
+  before this v0.33.3 revision was committed.
 - **r2.** (Not applicable — kept for completeness.) If gate runs had started
   under the degenerate §2.1 definition, `samp_drift_only`'s results would
   remain valid (the buggy `ia_samp` is mathematically identical to
@@ -460,3 +546,60 @@ is the automated check).
   **No gate training run (§6) has started as of this commit** — both Sol
   and Fable are joint-GO conditional on this patch; launch (gate + pilot40 +
   util_regen) follows immediately after this commit, per r1.
+- **v0.33.3 (2026-08-15, this revision, final pre-launch amendment, joint
+  Sol+Fable, pre-unblinding; no formula/threshold changes):** triggered
+  solely by the backend-reproduction audit surfaced while executing v0.33.2
+  item 3 (§5.2) — a CPU regen of `ours_uniform`/`distill` failed the
+  checksum on 12/12 rows (`Δ` up to 0.148) while the identical command on
+  MPS reproduced the frozen Protocol-v1 rows bit-exactly. This established
+  backend/execution-path as a material protocol variable, so the originally
+  planned "CUDA new methods vs. MPS frozen baselines" gate comparison was
+  retracted before any gate training ran. **No gate result has been read
+  under this or any prior amendment.** M1/M2 formulas, epsilon, lambda,
+  seeds, K, order, and the g1–g4 thresholds are unchanged from v0.33.2;
+  this amendment is scoped entirely to experimental-control/backend design:
+  1. **CPU→MPS provenance correction committed (item A):** the v0.33.2
+     commit (including its CPU→MPS correction, §5.2) is now landed. The
+     failed CPU regen's launch log and a written explanation are archived
+     at `runs/v2/util_regen_20260815_cpu_FAILED/` (the CPU run's own output
+     CSV was lost to working-directory cleanup before archiving; the launch
+     log's per-unit summary and the previously-computed `Δ≈0.148` finding
+     are preserved as evidence, not used in any table). Protocol-v1 is now
+     documented everywhere as historically produced on Apple MPS
+     (`docs/audit_20260815.md`, `docs/compute_policy.md`, this file).
+  2. **Backend design changed to MPS-first (§5.4):** the gate now runs
+     entirely on Mac MPS. Frozen Protocol-v1 MPS rows + the bit-exact MPS
+     `util_regen` (§5.2) serve as same-backend comparators; **no comparator
+     retraining is needed** (cheaper and cleaner than the CUDA-matched
+     alternative, which would have required 60 total runs instead of 33).
+     Gate compute = exactly the 33 new-method runs. WP5 `pilot40` remains on
+     RunPod CUDA in parallel — a self-contained table with no frozen-row
+     backend to match, unaffected by this change.
+  3. **Timing decision rule executed (§5.5):** the pre-registered
+     representative-unit timing check (`eq_pres`, seed 0, `K=2`, MPS) ran
+     for `t_unit=351s`; `T_total = 33*351s*1.15 = 3.70h <= 48h`, so the rule
+     resolved to "proceed all-MPS" automatically, with no CUDA fallback
+     triggered.
+  4. **Runner added (§5.6):** `scripts/run_method_gate.py` pins the 33-unit
+     gate grid into one atomic-resume invocation and writes a per-unit
+     manifest (`git_commit`/`backend`/`torch_version`/wall-clock seconds via
+     the new `nav.device.run_provenance()` helper, also wired into
+     `scripts/cl_main.py`'s metadata for every run in this project, not
+     just the gate).
+  5. **Compute policy established (`docs/compute_policy.md`):** a
+     repo-level contract — CPU never for formal training/regeneration/
+     evaluation (post-processing only); MPS is the default backend for all
+     formal Track-A/Track-B runs; CUDA only inside an explicitly opened
+     backend-matched protocol; never present a cross-backend delta as a
+     method effect; torch version pinned until submission; every
+     result-producing run logs device/torch/host/commit/seed/tag/command.
+  Implemented in `nav/device.py` (`run_provenance`), `scripts/cl_main.py`
+  (provenance wired into `metadata.json`), `scripts/run_method_gate.py`
+  (new), `docs/compute_policy.md` (new),
+  `runs/v2/util_regen_20260815_cpu_FAILED/` (new, archived diagnostic
+  evidence), and this document (§5.4–§5.6, r1, title/status). **After this
+  commit the pre-registration freezes per r3** — gate launch (Mac MPS,
+  `tmux`+`caffeinate`, per §5/§5.6) and WP5 `pilot40` launch (RunPod CUDA)
+  proceed immediately and in parallel; the process stops at the gate
+  verdict for joint unblinding review, with no promotion runs before that
+  review.

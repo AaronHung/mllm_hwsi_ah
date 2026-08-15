@@ -40,7 +40,8 @@ import torch
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from nav import add_device_argument, device_info, resolve_device  # noqa: E402
+from nav import (add_device_argument, device_info,  # noqa: E402
+                 resolve_device, run_provenance)
 from nav.candata import COHORTS, CanTask  # noqa: E402
 from nav.cl import (METHOD_GATE_KWARGS, METHOD_KWARGS,  # noqa: E402
                     attach_boundary_policy, build_buffer,
@@ -275,6 +276,7 @@ def main():
     meta = device_info(args.device, device).as_dict()
     meta["resolved_device"] = meta.pop("resolved")
     meta["run_tag"] = args.tag or ("smoke" if args.smoke else "full")
+    meta.update(run_provenance())  # v0.33.3 item E5: commit/hostname/command
     tag = meta["run_tag"]
     out_dir = (Path(args.output_dir) if args.output_dir is not None
                else REPO / "runs" / "v2" / tag)

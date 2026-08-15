@@ -7,7 +7,7 @@
 """
 
 from .device import (DeviceInfo, add_device_argument, device_info, get_device,
-                     resolve_device, setup_mps)
+                     resolve_device, run_provenance, setup_mps)
 
 __all__ = [
     "DeviceInfo",
@@ -15,5 +15,6 @@ __all__ = [
     "device_info",
     "get_device",
     "resolve_device",
+    "run_provenance",
     "setup_mps",
 ]
