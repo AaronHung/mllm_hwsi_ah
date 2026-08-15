@@ -201,13 +201,22 @@ learning task $t{+}1$ we optimize
 + \sum_{s \in \mathcal{M}} \Big[
 \mathrm{KL}\big(q_s \| \pi_\theta\big)
 + \lambda\, w(s)\,
-\mathrm{KL}\big(\pi_\theta \| \pi_{\mathrm{old}}\big) \Big],
+\mathcal{L}_{\mathrm{distill}}(s) \Big],\quad
+\mathcal{L}_{\mathrm{distill}}(s) = \mathrm{KL}\big(\pi_{\mathrm{old}} \| \pi_\theta\big),
 \label{eq:cl}
 \end{equation}
 with $w(s) = u(s)/\bar u$ clipped at $5$: replayed teacher targets keep the
-policy competent on old states, and the distillation term anchors it to the
-old policy \emph{most strongly where evidence choice mattered most}. States
-whose gain landscape is flat consume almost no preservation capacity.
+policy competent on old states, and the distillation term anchors the current
+policy $\pi_\theta$ to the old policy $\pi_{\mathrm{old}}$ \emph{most strongly
+where evidence choice mattered most}. States whose gain landscape is flat
+consume almost no preservation capacity. We write the training-time term
+$\mathcal{L}_{\mathrm{distill}}$ and the measurement-time \emph{action-KL
+drift} metric with distinct symbols to avoid conflating them: the metric
+reported in Table~\ref{tab:main} is
+$D_{\mathrm{drift}}(j) = \mathrm{KL}\big(\pi^{(j)}_{\mathrm{own}} \|
+\pi_{\mathrm{final}}\big)$, the divergence from task $T_j$'s own-time policy
+$\pi^{(j)}_{\mathrm{own}}$ to the sequence-final policy $\pi_{\mathrm{final}}$
+on $T_j$'s frozen probe states --- it is never optimized, only measured.
 
 \section{Experiments}
 \label{sec:exp}

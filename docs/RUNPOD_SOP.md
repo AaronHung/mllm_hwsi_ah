@@ -1,5 +1,31 @@
 # RunPod SOP v2 — `mllm_hwsi_ah`
 
+---
+
+## 開機 Aaron 筆記：
+
+已補成可重開使用的 SOP。
+
+修正內容：
+
+- `CAN_ROOT` 預設改為實際 volume 路徑：
+  `/workspace/datasets/can_dataset`
+- bootstrap 會持久化 `PYTHON_BIN`
+- `smoke_test.sh` 自動使用 `/workspace/venvs/mllm_hwsi_ah`
+- 新增一頁式 `docs/RUNPOD_QUICKSTART.md`
+
+重開 pod 後真正需要記的只有：
+
+1. 掛回同一個 `/workspace` volume
+2. `source scripts/runpod_bootstrap.sh`
+3. `git pull --ff-only`
+4. `tmux ls` 或建立新 session
+5. 用同一個 `RUN_TAG` 加 `--resume`
+
+`/workspace` 內的 repo、venv、cache、dataset、logs、checkpoints 會保留；active tmux session、shell environment、`/usr/bin/tmux` 不保留，但 bootstrap 會重建。
+
+---
+
 This is the fresh-boot runbook for Mac development → GitHub → RunPod CUDA →
 GitHub → Mac analysis. It is intentionally interactive: Aaron runs one block,
 pastes its output, and only then do we continue. The agent cannot SSH into the

@@ -68,6 +68,10 @@ class TeacherStep:
     context: torch.Tensor     # [513]
     gain: torch.Tensor        # [C] counterfactual gain
     utility: float = field(default=0.0)
+    # Stage-boundary policy snapshot over `candidates`, set once when this
+    # step is admitted into the replay buffer (see nav.cl.attach_boundary_policy).
+    # Only populated for methods that need M1's drift term; None otherwise.
+    boundary_policy: torch.Tensor | None = field(default=None)
 
 
 @torch.no_grad()

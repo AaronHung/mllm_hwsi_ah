@@ -9,6 +9,11 @@ Protocol（凍結）見 docs/protocol.md：
       joint-training reference）
     - K ∈ {1,2,4}；seeds {0..4}；指標見 protocol §4
 
+v0.33.1 method-gate configs (docs/method_gate_v033.md; NOT part of the frozen
+Protocol-v1 table above): ia_samp / eq_pres / ia_ep / samp_util_only /
+samp_drift_only. Pass them via --methods like any other method key; they
+read nav.cl.METHOD_GATE_KWARGS instead of METHOD_KWARGS.
+
 用法：
     python scripts/cl_main.py --dataset can --smoke                  # Mac 煙測
     python scripts/cl_main.py --dataset can --order main             # 完整（可用 --methods/--seeds/--budgets 分片）
@@ -34,7 +39,8 @@ sys.path.insert(0, str(REPO))
 
 from nav import add_device_argument, device_info, resolve_device  # noqa: E402
 from nav.candata import COHORTS, CanTask  # noqa: E402
-from nav.cl import (METHOD_KWARGS, build_buffer, eval_policy_balanced,  # noqa: E402
+from nav.cl import (METHOD_GATE_KWARGS, METHOD_KWARGS,  # noqa: E402
+                    attach_boundary_policy, build_buffer, eval_policy_balanced,
                     fisher_of, jaccard, kl_drift, policy_on_probes,
                     train_navigator_cl, trajectory_utility)
 from nav.engine import teacher_rollout, train_evaluator  # noqa: E402
@@ -102,9 +108,16 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                  lam: float, lam_ewc: float,
                  replay_per_slide: int = 2, buffer_cap: int = 512,
                  eval_split: str = "test",
-                 run_meta: dict[str, object] | None = None) -> list[dict]:
+                 run_meta: dict[str, object] | None = None,
+                 diag_log: list[dict] | None = None) -> list[dict]:
     torch.manual_seed(seed)
     t_start = time.time()
+
+    # v0.33.1 method-gate configs (docs/method_gate_v033.md) live in
+    # METHOD_GATE_KWARGS, never in the frozen METHOD_KWARGS table.
+    method_kwargs = dict(METHOD_KWARGS.get(method)
+                         or METHOD_GATE_KWARGS.get(method, {}))
+    needs_boundary_policy = method_kwargs.get("replay_sampling") == "importance"
 
     nav = None
     old_nav = None
@@ -137,19 +150,21 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
             nav = train_navigator_cl(steps, device, navigator=nav,
                                      epochs=nav_epochs, seed=seed)
         else:
-            kw = dict(METHOD_KWARGS.get(method, {}))
             buffer = [st for bb in buffer_by_task for st in bb]
             nav = train_navigator_cl(
                 steps, device, navigator=nav, epochs=nav_epochs, seed=seed,
                 old_nav=old_nav, buffer=buffer, lam=lam,
                 ewc_terms=ewc_terms if method == "ewc" else None,
-                lam_ewc=lam_ewc, **kw)
+                lam_ewc=lam_ewc, diag_log=diag_log, **method_kwargs)
 
         # ---- 任務結束的 bookkeeping ----
         if method == "ewc":
             ewc_terms.append(fisher_of(nav, steps, device, seed=seed))
         buffer_by_task.append(build_buffer(steps, per_slide=replay_per_slide,
                                            cap=buffer_cap))
+        if needs_boundary_policy:
+            # M1 reads d_t(s) against this snapshot in every later stage.
+            attach_boundary_policy(buffer_by_task[-1], nav, device)
         old_nav = copy.deepcopy(nav)
 
         te_bank = task.banks[eval_split]
@@ -282,11 +297,15 @@ def main():
                 if key in completed:
                     print(f"[resume] skip {key}")
                     continue
+                diag_log: list[dict] = [] if method in METHOD_GATE_KWARGS else None
                 rows = run_sequence(tasks, method, seed, k, device,
                                     ev_epochs, nav_epochs,
                                     args.lam, lam_ewc,
                                     args.replay_per_slide, args.buffer_cap,
-                                    run_meta=meta)
+                                    run_meta=meta, diag_log=diag_log)
+                if diag_log:
+                    diag_path = out_dir / f"diag_{method}_seed{seed}_K{k}.json"
+                    diag_path.write_text(json.dumps(diag_log, indent=2))
                 for r in rows:
                     r.update(dataset=args.dataset, order=args.order)
                 df = pd.DataFrame(rows)

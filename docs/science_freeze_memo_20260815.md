@@ -1,8 +1,20 @@
 # Science-freeze memo after WP1–WP4
 
 **Parent direction:** v0.32 — Continual Budgeted Evidence Acquisition  
-**Execution contract:** v0.292  
+**Execution contract:** v0.292 (method track extended in v0.33.1, see
+`docs/method_gate_v033.md`)  
 **Decision date:** 2026-08-15
+
+> **v0.33.1 update:** the statistics policy below changed from "one global
+> Benjamini–Hochberg FDR policy" to **purely descriptive** (paired mean diff +
+> 95% bootstrap CI + per-seed sign agreement, no p/q-value language) — with
+> `n=5` seeds the exact sign-flip floor is `p_min=0.0625 > 0.05`, so no
+> comparison family, however small, can ever be BH-significant here; shrinking
+> the family does not help (see `docs/handoff_fable_sol_20260815.md` §2.6).
+> `results/paired_stats_pack.md` also gained three `*-seqft` rows (carry-over
+> c1) — these have the largest, most consistent effects in the whole table
+> (e.g. main K=1 `distill-seqft` action-KL: mean +0.2637, 95% CI
+> [+0.2386,+0.2872], 5/5 seeds agree), directly supporting C2/C4.
 
 ## Decision
 
@@ -20,14 +32,15 @@ analysis, but does not justify a K=2 extension or a new method claim.
 | C3: frozen evaluators attribute old-task change to the shared policy | Supported by protocol and audit | Keep |
 | C4: replay/distillation reduces acquisition drift and often forgetting | Supported, but method ranking is metric/order dependent | Keep with “substantially reduces drift”; no universal winner |
 | C5: behavior fidelity and capability retention are different axes | Provisional, not strengthened by WP3: after fixing an order-pooling bug in `plasticity_report.py`, λ=3 own-time degradation appears in only 2/8 matched task×K cells (main order only) | No stability–plasticity wording; use behavior-fidelity / capability-retention framing only |
-| C6: utility weighting is a budget-dependent refinement | Descriptive/provisional: K=2 `ours−ours_uniform` forgetting CI is positive, but global BH-FDR is not significant; buffer composition is shared | Do not claim universal utility benefit |
+| C6: utility weighting is a budget-dependent refinement | Descriptive/provisional: K=2 `ours−ours_uniform` forgetting CI is positive but not consistent across K (sign flips at K=1); buffer composition is shared | Do not claim universal utility benefit |
 | C7: task order changes method behavior | Descriptive/provisional across paired main/reverse outputs; no ranking-reversal claim | Say “task-order dependence” only if qualified/descriptive |
 
 ## Evidence produced
 
-- `results/paired_stats_pack.md`: 120 paired seed-level bootstrap rows,
-  six requested comparison families, both orders where available, one global
-  Benjamini–Hochberg FDR policy.
+- `results/paired_stats_pack.md`: 210 paired seed-level bootstrap rows (six
+  confirmatory comparison families plus three `*-seqft` exploratory rows added
+  in v0.33), both orders where available, purely descriptive (mean diff + 95%
+  CI + per-seed sign agreement; see the v0.33.1 update above).
 - `docs/audit_20260815.md`: metric directions, update/loss/buffer fairness,
   joint reference semantics, and the reverse `K=1` `distill` std check.
 - `results/plasticity_report.md`: own-time `A[t,t]` by method/λ, both orders.

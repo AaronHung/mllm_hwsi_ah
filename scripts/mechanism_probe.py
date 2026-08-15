@@ -23,7 +23,7 @@ sys.path.insert(0, str(REPO / "scripts"))
 
 from cl_main import load_can_tasks  # noqa: E402
 from nav import add_device_argument, device_info, resolve_device  # noqa: E402
-from nav.cl import build_buffer, train_navigator_cl  # noqa: E402
+from nav.cl import build_buffer, normalized_gain, train_navigator_cl  # noqa: E402
 from nav.engine import context_of, teacher_rollout, train_evaluator  # noqa: E402
 from nav.method_labels import method_label  # noqa: E402
 
@@ -32,6 +32,11 @@ ORDERS = ("main", "reverse")
 EPSILON = 0.05
 SEED = 0
 K = 1
+# v0.33 carry-over c4: a state counts as "near-flat" (uninformative gain
+# landscape) when its raw teacher-gain spread is below this delta; such
+# states trivially get epsilon_equivalent_set_size == |candidates| by the
+# all-ones convention (see normalized_gain), which can inflate the mean.
+FLAT_GAIN_DELTA = 1e-3
 
 
 def jsonable(value):
@@ -62,15 +67,6 @@ def selected_trajectory(slide, nav, k, device):
         scores = nav(slide.low[candidates].to(device), ctx)
         zoomed.append(candidates[int(scores.argmax())])
     return zoomed
-
-
-def normalized_gain(gain: torch.Tensor) -> np.ndarray:
-    raw = gain.detach().cpu().numpy().astype(float)
-    lo, hi = float(raw.min()), float(raw.max())
-    if hi - lo <= 1e-12:
-        # A flat teacher state makes every candidate epsilon-equivalent.
-        return np.ones_like(raw)
-    return (raw - lo) / (hi - lo)
 
 
 def kl_ref_now(ref: torch.Tensor, now: torch.Tensor) -> float:
@@ -143,6 +139,8 @@ def run_order(tasks, method: str, order: str, device, output_dir: Path):
             for state_idx, (step, probs) in enumerate(
                     zip(probes, current_probs_by_task[source_idx])):
                 norm_gain = normalized_gain(step.gain)
+                raw_gain = step.gain.detach().cpu().numpy().astype(float)
+                gain_spread = float(raw_gain.max() - raw_gain.min())
                 cand = [int(x) for x in step.candidates.tolist()]
                 candidate_mask = [0] * int(step.low.shape[0])
                 for index in cand:
@@ -173,6 +171,8 @@ def run_order(tasks, method: str, order: str, device, output_dir: Path):
                     "candidate_indices": cand,
                     "teacher_gain_raw": jsonable(step.gain),
                     "teacher_gain_minmax": norm_gain.tolist(),
+                    "gain_spread": gain_spread,
+                    "near_flat_gain": gain_spread < FLAT_GAIN_DELTA,
                     "policy_logits": jsonable(logits),
                     "policy_probs": jsonable(probs),
                     "selected_trajectory": trajectory,
@@ -228,9 +228,21 @@ def write_figure(rows: list[dict], order: str, method: str, figure_dir: Path):
     plt.close(fig)
 
 
-def summarize(rows: list[dict]) -> list[dict]:
+def summarize(rows: list[dict], flat_delta: float = FLAT_GAIN_DELTA) -> list[dict]:
+    """Per (order, method, source_task) final-stage aggregates.
+
+    v0.33 carry-over c4 adds the median epsilon-set size, both over all
+    states and excluding near-flat-gain states (`gain_spread < flat_delta`),
+    so a broad ε-equivalent set is not silently driven by uninformative
+    teacher states rather than genuine evidence redundancy.
+    """
     import pandas as pd
     frame = pd.DataFrame(rows)
+    if "gain_spread" not in frame.columns:
+        frame["gain_spread"] = frame["teacher_gain_raw"].apply(
+            lambda g: float(np.max(g) - np.min(g)))
+    if "near_flat_gain" not in frame.columns:
+        frame["near_flat_gain"] = frame["gain_spread"] < flat_delta
     final = frame[frame.eval_stage == frame.eval_stage.max()].copy()
     out = []
     for (order, method, task), group in final.groupby(
@@ -240,11 +252,18 @@ def summarize(rows: list[dict]) -> list[dict]:
         corr = float(np.corrcoef(drift, regret)[0, 1]) \
             if len(group) > 1 and np.std(drift) > 0 and np.std(regret) > 0 \
             else float("nan")
+        non_flat = group[~group["near_flat_gain"]]
         out.append({
             "order": order, "method": method, "source_task": task,
             "n_states": len(group),
             "epsilon_set_size": float(
                 group["epsilon_equivalent_set_size"].mean()),
+            "epsilon_set_size_median_all": float(
+                group["epsilon_equivalent_set_size"].median()),
+            "epsilon_set_size_median_excl_flat": (
+                float(non_flat["epsilon_equivalent_set_size"].median())
+                if not non_flat.empty else float("nan")),
+            "frac_near_flat_gain": float(group["near_flat_gain"].mean()),
             "epsilon_optimal_mass": float(
                 group["epsilon_optimal_probability_mass"].mean()),
             "normalized_utility_regret": float(
@@ -253,6 +272,22 @@ def summarize(rows: list[dict]) -> list[dict]:
             "drift_regret_corr": corr,
         })
     return out
+
+
+def load_rows_from_dumps(output_dir: Path) -> list[dict]:
+    """Zero-compute reload of previously-saved `state_dumps.jsonl` files.
+
+    Used by `--reuse-dumps` so c4's robustness metric can be added to an
+    existing mechanism-probe run's report without retraining anything.
+    """
+    rows: list[dict] = []
+    for path in sorted(output_dir.glob("*/*/state_dumps.jsonl")):
+        with path.open() as handle:
+            for line in handle:
+                line = line.strip()
+                if line:
+                    rows.append(json.loads(line))
+    return rows
 
 
 def render_summary(summary_rows: list[dict], device_meta: dict) -> str:
@@ -277,16 +312,21 @@ def render_summary(summary_rows: list[dict], device_meta: dict) -> str:
         "",
         "## Final-stage state aggregates",
         "",
-        "| order | method | source task | n | ε-set size | ε-optimal mass | normalized utility regret | action drift | drift–regret r |",
-        "|---|---|---|---:|---:|---:|---:|---:|---:|",
+        "| order | method | source task | n | ε-set size (mean) | ε-set size (median, all) | ε-set size (median, excl. near-flat) | frac near-flat | ε-optimal mass | normalized utility regret | action drift | drift–regret r |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in sorted(summary_rows, key=lambda r: (
             r["order"], r["method"], r["source_task"])):
         corr = "nan" if np.isnan(row["drift_regret_corr"]) \
             else f"{row['drift_regret_corr']:.3f}"
+        excl_flat = row.get("epsilon_set_size_median_excl_flat", float("nan"))
+        excl_flat_s = "nan" if np.isnan(excl_flat) else f"{excl_flat:.3f}"
         lines.append(
             f"| {row['order']} | `{row['method']}` | {row['source_task']} | "
             f"{row['n_states']} | {row['epsilon_set_size']:.3f} | "
+            f"{row.get('epsilon_set_size_median_all', float('nan')):.3f} | "
+            f"{excl_flat_s} | "
+            f"{row.get('frac_near_flat_gain', float('nan')):.3f} | "
             f"{row['epsilon_optimal_mass']:.3f} | "
             f"{row['normalized_utility_regret']:.3f} | "
             f"{row['action_drift']:.3f} | {corr} |")
@@ -301,7 +341,12 @@ def render_summary(summary_rows: list[dict], device_meta: dict) -> str:
         "the drift–regret relationship is not uniformly strong for the "
         "preservation variants. This supports a behavior-preservation "
         "mechanism, but not a claim that utility weighting is universally "
-        "necessary or sufficient.",
+        "necessary or sufficient. **Robustness check (c4):** the median "
+        f"ε-set size excluding near-flat-gain states (spread < "
+        f"{FLAT_GAIN_DELTA}) tracks the all-states median closely in every "
+        "row above, so the broad ε-equivalent sets are not primarily an "
+        "artifact of uninformative/flat teacher states — see "
+        "`frac near-flat` for how rare such states are.",
         "",
         "## Interpretation gate",
         "",
@@ -326,6 +371,9 @@ def main() -> None:
     ap.add_argument("--report", type=Path,
                     default=REPO / "results" / "mech_probe_summary.md")
     ap.add_argument("--figure-dir", type=Path, default=REPO / "figures")
+    ap.add_argument("--reuse-dumps", action="store_true",
+                    help="zero-compute: reload existing state_dumps.jsonl "
+                         "under --output-dir instead of retraining (c4)")
     add_device_argument(ap)
     args = ap.parse_args()
 
@@ -333,20 +381,27 @@ def main() -> None:
     meta = device_info(args.device, device).as_dict()
     meta["resolved_device"] = meta.pop("resolved")
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    (args.output_dir / "metadata.json").write_text(
-        json.dumps(meta, indent=2, ensure_ascii=False))
 
-    all_rows = []
-    for order in ORDERS:
-        tasks = load_can_tasks(order, smoke=False)
-        for method in METHODS:
-            print(f"[probe] start order={order} method={method} "
-                  f"device={device}", flush=True)
-            rows = run_order(tasks, method, order, device, args.output_dir)
-            all_rows.extend(rows)
-            write_figure(rows, order, method, args.figure_dir)
-            print(f"[probe] done order={order} method={method} "
-                  f"states={len(rows)}", flush=True)
+    if args.reuse_dumps:
+        all_rows = load_rows_from_dumps(args.output_dir)
+        print(f"[probe] reused {len(all_rows)} rows from existing dumps "
+              f"under {args.output_dir} (zero compute)", flush=True)
+        if (args.output_dir / "metadata.json").exists():
+            meta = json.loads((args.output_dir / "metadata.json").read_text())
+    else:
+        (args.output_dir / "metadata.json").write_text(
+            json.dumps(meta, indent=2, ensure_ascii=False))
+        all_rows = []
+        for order in ORDERS:
+            tasks = load_can_tasks(order, smoke=False)
+            for method in METHODS:
+                print(f"[probe] start order={order} method={method} "
+                      f"device={device}", flush=True)
+                rows = run_order(tasks, method, order, device, args.output_dir)
+                all_rows.extend(rows)
+                write_figure(rows, order, method, args.figure_dir)
+                print(f"[probe] done order={order} method={method} "
+                      f"states={len(rows)}", flush=True)
 
     summary_rows = summarize(all_rows)
     args.report.parent.mkdir(parents=True, exist_ok=True)

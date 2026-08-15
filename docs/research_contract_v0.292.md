@@ -45,6 +45,14 @@ distillation loss, not the full effect of utility-aware memory.
 
 ## Statistical policy
 
+> **Superseded 2026-08-15 (v0.33.1):** the Benjamini–Hochberg policy below was
+> the original v0.292 plan, but with `n=5` seeds the exact sign-flip floor is
+> `p_min=2/2^5=0.0625 > 0.05`, so no comparison family can ever clear
+> `q<=0.05` — this is a mathematical fact, not an artifact of family size.
+> Current policy is purely descriptive: paired mean diff + 95% bootstrap CI +
+> per-seed sign agreement, tagged `confirmatory`/`exploratory`. See
+> `docs/handoff_fable_sol_20260815.md` §2.6 and `docs/method_gate_v033.md`.
+
 WP1 uses paired seed-level bootstrap 95% CIs for every available comparison,
 order, budget, and metric. The primary axes are capability (`AA`, `Forgetting`,
 `BWT`), behavior (`Jaccard`, `action-KL`), and utility when available.

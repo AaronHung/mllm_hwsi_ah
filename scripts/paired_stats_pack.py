@@ -102,6 +102,17 @@ def add_setting(
         settings[name] = df
 
 
+BASE_GRID_METHODS = {"ours", "distill", "replay", "seqft"}
+
+# v0.292 pre-registered the first six; the three seqft rows were added in the
+# v0.33 carry-over (c1) after the fact, so they are exploratory by
+# definition even though they test the paper's central C2/C4 claims.
+CONFIRMATORY_COMPARISONS = {
+    "ours-distill", "ours-replay", "distill-replay",
+    "ours-ours_uniform", "mem2048-ours", "lambda3-ours",
+}
+
+
 def compute(settings: dict[str, pd.DataFrame], orders: list[str]) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     comparisons = [
@@ -111,6 +122,11 @@ def compute(settings: dict[str, pd.DataFrame], orders: list[str]) -> pd.DataFram
         ("ours", "ours_uniform"),
         ("mem2048", "ours"),
         ("lambda3", "ours"),
+        # v0.33 carry-over c1: CL-vs-no-preservation rows were missing even
+        # though C2/C4 are the paper's central claims.
+        ("distill", "seqft"),
+        ("ours", "seqft"),
+        ("replay", "seqft"),
     ]
     for order in orders:
         if order not in settings:
@@ -118,11 +134,11 @@ def compute(settings: dict[str, pd.DataFrame], orders: list[str]) -> pd.DataFram
         base = settings[order]
         for focal, baseline in comparisons:
             focal_df = (base[base["method"].eq(focal)]
-                        if focal in {"ours", "distill", "replay"}
+                        if focal in BASE_GRID_METHODS
                         else settings.get(f"{order}:{focal}",
                                           pd.DataFrame()))
             base_df = (base[base["method"].eq(baseline)]
-                       if baseline in {"ours", "distill", "replay"}
+                       if baseline in BASE_GRID_METHODS
                        else settings.get(f"{order}:{baseline}",
                                          pd.DataFrame()))
             if focal_df.empty or base_df.empty:
@@ -141,13 +157,23 @@ def compute(settings: dict[str, pd.DataFrame], orders: list[str]) -> pd.DataFram
                             else rv - lv).to_numpy()
                     mean, lo, hi = bootstrap_ci(
                         diff, seed=17 + len(rows))
+                    comparison = f"{focal}-{baseline}"
+                    sign_agree = int(max((diff > 0).sum(), (diff < 0).sum()))
                     rows.append(dict(
-                        order=order, K=int(k),
-                        comparison=f"{focal}-{baseline}",
+                        order=order, K=int(k), comparison=comparison,
+                        family=("confirmatory"
+                               if comparison in CONFIRMATORY_COMPARISONS
+                               else "exploratory"),
                         metric=metric, n=len(diff), mean=mean,
-                        ci_lo=lo, ci_hi=hi, p_value=sign_flip_p(diff)))
+                        ci_lo=lo, ci_hi=hi, sign_agree=sign_agree,
+                        p_value=sign_flip_p(diff)))
     result = pd.DataFrame(rows)
     if not result.empty:
+        # Kept for transparency/audit only — v0.33.1 stats policy (§2.6 of
+        # docs/handoff_fable_sol_20260815.md) is descriptive-first: the
+        # n=5 exact sign-flip floor (p_min=0.0625) means no comparison here
+        # can ever clear q<=0.05, so paper-facing text must not use these
+        # two columns as a significance claim.
         result["q_value"] = bh_qvalues(result["p_value"])
         result["fdr_significant"] = result["q_value"] <= 0.05
     return result
@@ -158,17 +184,26 @@ def render(result: pd.DataFrame, settings: dict[str, pd.DataFrame],
     lines = [
         "# WP1 paired statistics pack",
         "",
-        "v0.292 zero-compute analysis of frozen per-seed CSVs. Positive "
-        "`mean` means the first method is better for the metric direction.",
+        "v0.292 zero-compute analysis of frozen per-seed CSVs, extended in v0.33 "
+        "(carry-over c1) with `*-seqft` rows. Positive `mean` means the first "
+        "method is better for the metric direction.",
         "",
-        "## Multiple-comparison policy",
+        "## Statistics policy (v0.33.1, decided — see "
+        "docs/handoff_fable_sol_20260815.md §2.6)",
         "",
-        "One policy is used for the entire report: Benjamini–Hochberg FDR "
-        "control at q=0.05 over every available comparison × order × K × "
-        "metric hypothesis. Bootstrap intervals are descriptive 95% CIs; "
-        "claim-level significance requires the adjusted q-value and a CI "
-        "that points in the same direction. No metric is selected after "
-        "seeing the results.",
+        "This report is **descriptive by design, not a significance test**. With "
+        "`n=5` paired seeds, the exact two-sided sign-flip test's smallest "
+        "achievable p-value is `p_min = 2/2^5 = 0.0625 > 0.05`; Benjamini–Hochberg's "
+        "adjusted q-value for the single best-ranked hypothesis in any family of "
+        "size `m` is `q_(1) = p_(1)`, independent of `m`, so **no comparison family "
+        "size can ever clear `q <= 0.05` here** — shrinking the family does not "
+        "help. `p_value`/`q_value` are kept in the CSV for audit only; paper-facing "
+        "text must use only `mean`, the 95% bootstrap CI, and `sign_agree` (how "
+        "many of the `n` seeds agree with `mean`'s sign, e.g. `5/5`). Each row is "
+        "also tagged `confirmatory` (the six comparisons pre-registered in "
+        "docs/research_contract_v0.292.md) or `exploratory` (the `*-seqft` rows "
+        "added afterward in v0.33) — do not present exploratory rows as "
+        "pre-registered.",
         "",
         "## Coverage",
         "",
@@ -186,13 +221,13 @@ def render(result: pd.DataFrame, settings: dict[str, pd.DataFrame],
         return "\n".join(lines) + "\n"
     for (order, k, comp), group in result.groupby(
             ["order", "K", "comparison"], sort=True):
-        lines.append(f"### {order}, K={k}, `{comp}`")
+        family = group["family"].iloc[0]
+        lines.append(f"### {order}, K={k}, `{comp}` ({family})")
         for row in group.itertuples():
-            sig = " **FDR-significant**" if row.fdr_significant else ""
             lines.append(
                 f"- {row.metric}: mean={row.mean:+.4f}, "
                 f"95% CI [{row.ci_lo:+.4f}, {row.ci_hi:+.4f}], "
-                f"p={row.p_value:.4f}, q={row.q_value:.4f}, n={row.n}{sig}")
+                f"sign_agree={row.sign_agree}/{row.n}")
         lines.append("")
     return "\n".join(lines) + "\n"
 

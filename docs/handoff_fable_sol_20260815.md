@@ -1,3 +1,14 @@
+> **Status: resolved.** Fable and Sol both reviewed this handoff (see
+> `Fab-v0.32-WP1-4_1`, `Sol-v0.32-WP1-4_1`, `Fab-v0.33-兩軌制-1` on HackMD) and
+> reached the v0.33.1 decisions superseding the open questions below: §2.6/Q1
+> statistics policy is **(a)**, decided (see the inline correction); §2.7/§3's
+> per-cell numbers were corrected again above (an earlier revision of this file
+> had itself hand-transcribed the pre-fix numbers — Fable caught it); Q2 (WP5)
+> is **run now**; Q3 (Fig. 1) keeps the family framing; Q4/Q5 are closed. The
+> live carry-over and Track-B (M1/M2 method gate) work is tracked in
+> `docs/method_gate_v033.md`. This file is kept as the dated record of what was
+> asked and found on 2026-08-15, not re-edited beyond the two erratum fixes.
+
 # Handoff to Fable (Claude.ai) & Sol (ChatGPT) — 2026-08-15
 
 **Purpose:** status report + list of problems found/fixed during v0.292 execution, for
@@ -101,17 +112,24 @@ survive q ≤ 0.05** (`results/paired_stats_pack.md` — grep confirms no
 family size, and `docs/science_freeze_memo_20260815.md` already treats every
 comparison-based claim (C4, C6, C7) as "descriptive/provisional" rather than
 "significant" for this reason — but it means **the paper cannot make any FDR-controlled
-significance claim from the existing 5-seed grids as currently pooled**. Options, for
-your evaluation:
+significance claim from the existing 5-seed grids as currently pooled**. Options
+considered:
   (a) keep the paper purely descriptive (CI direction + magnitude, no p/q-value
       language at all — this is what the current memo effectively already does);
-  (b) shrink the pre-registered hypothesis family (e.g. report only the `ours` vs.
-      `distill`/`replay` primary comparisons, not all 6 families × both orders) so BH-FDR
-      has a chance to detect something real;
+  (b) ~~shrink the pre-registered hypothesis family~~ — **mathematically void, not just
+      weak**: BH's adjusted q-value for the single best-ranked hypothesis in a family of
+      size `m` is `q_(1) = p_(1)`, independent of `m`. Since the exact two-sided
+      sign-flip floor at `n=5` is `p_min = 2/2^5 = 0.0625 > 0.05` for *every* hypothesis,
+      no family size — down to `m=1` — can ever produce `q ≤ 0.05`. Shrinking the family
+      cannot rescue significance here;
   (c) accept that 5 seeds is underpowered and flag it as a stated limitation rather than
       running more seeds this late in the timeline.
-  My default until told otherwise: (a), because it is already what the memo does and
-  needs no new compute.
+  **Decision: (a).** No p/q-value language in the paper; report paired mean diff + 95%
+  bootstrap CI + per-seed sign count (e.g. "5/5 seeds agree in direction"), split into
+  confirmatory (pre-registered) vs. exploratory rows, plus one sentence stating the
+  `n=5` exact-test floor as the reason inference is descriptive by design. If the advisor
+  explicitly demands formal significance later, the only real lever is more seeds on the
+  four core methods on one backend — not a smaller family.
 
 ### 2.7 `plasticity_report.py` silently pooled main+reverse order in the λ comparison (found and fixed while writing this handoff)
 
@@ -169,12 +187,18 @@ buffer truncation are the two documented interpretation limits (§2.3, §2.4). R
 
 Own-time accuracy `A[t,t]` degradation from λ=1.0→3.0, **main order only** (the λ
 ablation does not exist for reverse order, and must not be pooled with it): degradation
-in only 2 of 8 matched task×K cells (`results/plasticity_lambda_differences.csv`:
-`K=1` brca −0.0119, esca −0.0250 degrade; `K=1` lung +0.0132, rcc +0.0025 improve;
-`K=2` brca +0.0244, esca +0.0134 improve; `K=2` lung −0.0048, rcc −0.0004 degrade). This
-is a minority of cells, so the report's own majority rule now selects **"no consistent
-degradation"** — the qualified stability–plasticity phrasing is not licensed anywhere;
-use "behavior-fidelity / capability-retention trade-off" as the only framing.
+in only 2 of 8 matched task×K cells (`results/plasticity_lambda_differences.csv`,
+quoted verbatim, not retyped: `K=1` brca +0.0250, esca +0.0000 (structurally exact —
+task 0 has no buffer yet, so λ cannot affect it), lung +0.0065, rcc +0.0074 — **none
+degrade at K=1**; `K=2` brca +0.0119, esca +0.0000, lung −0.0038, rcc −0.0004 —
+**only these last two degrade**). This is a minority of cells (2/8), so the report's own
+majority rule selects **"no consistent degradation"** — the qualified
+stability–plasticity phrasing is not licensed anywhere; use "behavior-fidelity /
+capability-retention trade-off" as the only framing. (Erratum: an earlier revision of
+this section quoted a different, incorrect set of per-cell numbers hand-transcribed from
+the pre-fix CSV; the numbers above are copy-pasted from the current
+`plasticity_lambda_differences.csv` after the §2.7 fix, and match the script's own
+printed "2/8" verdict.)
 
 ### WP4 (`results/mech_probe_summary.md`)
 

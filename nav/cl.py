@@ -9,10 +9,17 @@
 
 engine.train_navigator 保留給舊腳本；本模組的 train_navigator_cl 是一般化版本：
     - imitation：新任務 teacher 分佈的 KL 模仿（所有方法共同）
-    - lwf     ：新任務 state 上 KL(π_new ‖ π_old)（無 buffer）
+    - lwf     ：新任務 state 上 KL(π_old ‖ π_new)（無 buffer；F.kl_div(log π_new, π_old)
+                的慣例是 target=π_old 在左，見 §2.1 的 action-KL 方向澄清同一慣例）
     - replay  ：buffer state 上模仿 counterfactual-teacher gain target
-    - distill ：buffer state 上 KL(π_new ‖ π_old)，uniform 權重
+    - distill ：buffer state 上 KL(π_old ‖ π_new)，uniform 權重
     - ewc     ：Fisher 加權的參數距離懲罰
+
+v0.33.1 方法軌（docs/method_gate_v033.md）：
+    - M1 (replay_sampling="importance")：buffer 抽樣機率改為
+      p(s) ∝ u_state(s)^alpha · d_t(s)^beta，buffer 成員本身不變。
+    - M2 (use_eq_pres=True)：distill 槽的 old-policy KL 換成 ε-equivalence
+      preservation loss L_eq，只作用在有抽到的 replay state 上。
 """
 
 from __future__ import annotations
@@ -22,6 +29,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn.functional as F
+from scipy.stats import rankdata
 
 from .engine import TeacherStep, context_of, evidence_of, rollout_policy
 from .models import Evaluator, Navigator
@@ -97,6 +105,37 @@ def kl_drift(pi_ref: list[torch.Tensor], pi_now: list[torch.Tensor]) -> float:
                           for pr, pn in zip(pi_ref, pi_now)]))
 
 
+def normalized_gain(gain: torch.Tensor) -> np.ndarray:
+    """Within-state min-max normalization of counterfactual gain.
+
+    Canonical definition shared with scripts/mechanism_probe.py — a flat
+    teacher state (no gain spread) makes every candidate epsilon-equivalent,
+    so it returns all-ones rather than all-zeros.
+    """
+    raw = gain.detach().cpu().numpy().astype(float)
+    lo, hi = float(raw.min()), float(raw.max())
+    if hi - lo <= 1e-12:
+        return np.ones_like(raw)
+    return (raw - lo) / (hi - lo)
+
+
+def epsilon_optimal_mask(gain: torch.Tensor, eps: float = 0.05) -> np.ndarray:
+    """Boolean mask over `gain`'s candidates for A_eps(s) (M2 preregistration)."""
+    return normalized_gain(gain) >= (1.0 - eps)
+
+
+def percentile_rank(values: np.ndarray) -> np.ndarray:
+    """Percentile rank in (0, 1], ties get the average rank.
+
+    Used for M1's cross-state importance u_state(s): raw (un-normalized) gain
+    is NOT comparable across states after within-state min-max normalization
+    (every non-flat state's top action would be exactly 1) — see the v0.33.1
+    patch changelog in docs/method_gate_v033.md.
+    """
+    values = np.asarray(values, dtype=float)
+    return rankdata(values, method="average") / len(values)
+
+
 # ------------------------------------------------------------------ buffer / fisher
 def build_buffer(steps: list[TeacherStep], per_slide: int = 2,
                  cap: int = 512) -> list[TeacherStep]:
@@ -113,6 +152,23 @@ def build_buffer(steps: list[TeacherStep], per_slide: int = 2,
     if len(picked) > cap:
         picked = sorted(picked, key=lambda st: -st.utility)[:cap]
     return picked
+
+
+@torch.no_grad()
+def attach_boundary_policy(buffer_chunk: list[TeacherStep],
+                          navigator: Navigator, device) -> None:
+    """Store the stage-boundary policy snapshot on each newly buffered step.
+
+    Called once, right after `build_buffer`, with the navigator as it stood
+    at the end of the stage in which that step's task was learned (i.e.
+    before it becomes `old_nav` for the next stage). Only needed by M1's
+    drift term d_t(s); harmless no-op cost for methods that never read it.
+    """
+    navigator.eval()
+    for st in buffer_chunk:
+        logits = navigator(st.low[st.candidates].to(device),
+                           st.context.to(device))
+        st.boundary_policy = F.softmax(logits, dim=0).detach().cpu()
 
 
 @dataclass
@@ -145,6 +201,76 @@ def fisher_of(nav: Navigator, steps: list[TeacherStep], device,
     return EwcTerm(fisher=fisher, anchor=anchor)
 
 
+# ------------------------------------------------------------------ v0.33.1 M1
+class ImportanceReplaySampler:
+    """M1: cross-state importance replay sampling (docs/method_gate_v033.md).
+
+    Buffer MEMBERSHIP is untouched — this only changes which buffer index is
+    drawn each update. `u_state(s)` is the percentile rank of `s`'s raw
+    (un-normalized) max-gain utility computed ACROSS the whole buffer, fixed
+    once per call (buffer composition does not change within a stage).
+    `d_t(s) = KL(pi_boundary(s) ‖ pi_theta(s))` is refreshed every
+    `refresh_every` optimizer updates via a no-grad forward pass. Exponents
+    `alpha`/`beta` let a factor be switched off (`x ** 0 == 1`) for the
+    samp_util_only / samp_drift_only attribution mini-arms without a
+    separate code path.
+    """
+
+    def __init__(self, buffer: list[TeacherStep], device, alpha: float = 1.0,
+                beta: float = 1.0, floor: float = 0.1,
+                refresh_every: int = 50,
+                diag_log: list[dict] | None = None) -> None:
+        self.buffer = buffer
+        self.device = device
+        self.alpha = alpha
+        self.beta = beta
+        self.floor = floor / max(len(buffer), 1)
+        self.refresh_every = max(int(refresh_every), 1)
+        self.diag_log = diag_log
+        raw_u = np.array([st.utility for st in buffer], dtype=float)
+        self.u_state = percentile_rank(raw_u)
+        self.dt_state = np.zeros(len(buffer))
+        self.p = np.full(len(buffer), 1.0 / max(len(buffer), 1))
+
+    @torch.no_grad()
+    def refresh(self, nav: Navigator, step: int) -> None:
+        was_training = nav.training
+        nav.eval()
+        dt = np.zeros(len(self.buffer))
+        for idx, st in enumerate(self.buffer):
+            if st.boundary_policy is None:
+                continue
+            logits = nav(st.low[st.candidates].to(self.device),
+                        st.context.to(self.device))
+            now_p = F.softmax(logits, dim=0)
+            ref_p = st.boundary_policy.to(self.device)
+            dt[idx] = float(F.kl_div(now_p.clamp_min(1e-12).log(), ref_p,
+                                     reduction="sum").item())
+        if was_training:
+            nav.train()
+        self.dt_state = dt
+        importance = (np.clip(self.u_state, 1e-8, None) ** self.alpha
+                     * np.clip(dt, 1e-8, None) ** self.beta)
+        p = importance / importance.sum()
+        p = np.maximum(p, self.floor)
+        self.p = p / p.sum()
+        if self.diag_log is not None:
+            entropy = float(-(self.p * np.log(self.p + 1e-12)).sum())
+            if self.u_state.std() > 1e-12 and dt.std() > 1e-12:
+                corr = float(np.corrcoef(self.u_state, dt)[0, 1])
+            else:
+                corr = None  # undefined when one side hasn't drifted yet
+            self.diag_log.append(dict(step=int(step), entropy=entropy,
+                                      corr_u_dt=corr))
+
+    def maybe_refresh(self, nav: Navigator, step: int) -> None:
+        if step % self.refresh_every == 0:
+            self.refresh(nav, step)
+
+    def sample(self, rng: np.random.Generator) -> int:
+        return int(rng.choice(len(self.buffer), p=self.p))
+
+
 # ------------------------------------------------------------------ trainer
 def train_navigator_cl(steps: list[TeacherStep], device,
                        navigator: Navigator | None = None,
@@ -158,7 +284,21 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                        use_lwf: bool = False,
                        lam: float = 1.0,
                        ewc_terms: list[EwcTerm] | None = None,
-                       lam_ewc: float = 100.0) -> Navigator:
+                       lam_ewc: float = 100.0,
+                       replay_sampling: str = "uniform",
+                       sampling_alpha: float = 1.0,
+                       sampling_beta: float = 1.0,
+                       sampling_floor: float = 0.1,
+                       drift_refresh_every: int = 50,
+                       use_eq_pres: bool = False,
+                       eps: float = 0.05,
+                       diag_log: list[dict] | None = None) -> Navigator:
+    """v0.33.1 adds `replay_sampling="importance"` (M1) and `use_eq_pres` (M2)
+    behind opt-in kwargs; every Protocol-v1 method keeps its old code path
+    (`replay_sampling="uniform"`, `use_eq_pres=False` are the defaults).
+    """
+    if replay_sampling not in ("uniform", "importance"):
+        raise ValueError(f"unknown replay_sampling: {replay_sampling!r}")
     rng = np.random.default_rng(seed)
     if navigator is None:
         navigator = Navigator(low_dim=steps[0].low.shape[1],
@@ -176,6 +316,21 @@ def train_navigator_cl(steps: list[TeacherStep], device,
     else:
         u_w = torch.ones(max(len(buffer), 1))
 
+    eps_masks = None
+    if buffer and use_eq_pres:
+        eps_masks = [torch.tensor(epsilon_optimal_mask(st.gain, eps),
+                                  device=device)
+                    for st in buffer]
+
+    sampler = None
+    if buffer and replay_sampling == "importance":
+        sampler = ImportanceReplaySampler(
+            buffer, device, alpha=sampling_alpha, beta=sampling_beta,
+            floor=sampling_floor, refresh_every=drift_refresh_every,
+            diag_log=diag_log)
+        sampler.refresh(nav, 0)
+
+    global_step = 0
     for _ in range(epochs):
         order = rng.permutation(len(steps))
         for i in order:
@@ -193,7 +348,8 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                                              old_p, reduction="sum")
 
             if buffer and (use_replay or use_distill):
-                j = int(rng.integers(len(buffer)))
+                j = sampler.sample(rng) if sampler is not None \
+                    else int(rng.integers(len(buffer)))
                 rst = buffer[j]
                 rlow = rst.low[rst.candidates].to(device)
                 rctx = rst.context.to(device)
@@ -203,10 +359,18 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                     r_target = F.softmax(rst.gain.to(device) / tau, dim=0)
                     loss = loss + F.kl_div(r_logp, r_target, reduction="sum")
                 if use_distill and old_nav is not None:
-                    with torch.no_grad():
-                        old_p = F.softmax(old_nav(rlow, rctx), dim=0)
-                    loss = loss + lam * u_w[j].to(device) * F.kl_div(
-                        r_logp, old_p, reduction="sum")
+                    if use_eq_pres:
+                        # M2: replace the old-policy KL term with the
+                        # epsilon-equivalence preservation loss (i2 guard).
+                        mask = eps_masks[j]
+                        pi_theta = F.softmax(r_scores, dim=0)
+                        mass = pi_theta[mask].sum().clamp(1e-8, 1.0)
+                        loss = loss + lam * u_w[j].to(device) * (-mass.log())
+                    else:
+                        with torch.no_grad():
+                            old_p = F.softmax(old_nav(rlow, rctx), dim=0)
+                        loss = loss + lam * u_w[j].to(device) * F.kl_div(
+                            r_logp, old_p, reduction="sum")
 
             if ewc_terms:
                 pen = torch.zeros((), device=device)
@@ -219,6 +383,10 @@ def train_navigator_cl(steps: list[TeacherStep], device,
             opt.zero_grad()
             loss.backward()
             opt.step()
+
+            global_step += 1
+            if sampler is not None:
+                sampler.maybe_refresh(nav, global_step)
     return nav
 
 
@@ -230,4 +398,25 @@ METHOD_KWARGS = {
     "distill": dict(use_distill=True, utility_weight=False),
     "ours_uniform": dict(use_replay=True, use_distill=True, utility_weight=False),
     "ours": dict(use_replay=True, use_distill=True, utility_weight=True),
+}
+
+# v0.33.1 method-gate configs (docs/method_gate_v033.md).  All build on the
+# ours_uniform base (use_replay + use_distill, utility_weight=False) so the
+# gate isolates exactly M1 (sampling) and/or M2 (loss), never buffer
+# membership or the pre-existing utility_weight ablation axis.
+METHOD_GATE_KWARGS = {
+    "ia_samp": dict(use_replay=True, use_distill=True, utility_weight=False,
+                    replay_sampling="importance"),
+    "eq_pres": dict(use_replay=True, use_distill=True, utility_weight=False,
+                    use_eq_pres=True),
+    "ia_ep": dict(use_replay=True, use_distill=True, utility_weight=False,
+                 replay_sampling="importance", use_eq_pres=True),
+    # Attribution mini-arms (K=1, 3 seeds only): zero one factor via its
+    # exponent rather than a separate sampler code path.
+    "samp_util_only": dict(use_replay=True, use_distill=True,
+                           utility_weight=False, replay_sampling="importance",
+                           sampling_beta=0.0),
+    "samp_drift_only": dict(use_replay=True, use_distill=True,
+                            utility_weight=False, replay_sampling="importance",
+                            sampling_alpha=0.0),
 }
