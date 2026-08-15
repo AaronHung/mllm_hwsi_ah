@@ -19,7 +19,7 @@ analysis, but does not justify a K=2 extension or a new method claim.
 | C2: sequential learning causes acquisition drift in both orders/budgets | Supported by frozen main/reverse tables and K=1 probe | Keep |
 | C3: frozen evaluators attribute old-task change to the shared policy | Supported by protocol and audit | Keep |
 | C4: replay/distillation reduces acquisition drift and often forgetting | Supported, but method ranking is metric/order dependent | Keep with “substantially reduces drift”; no universal winner |
-| C5: behavior fidelity and capability retention are different axes | Provisional but strengthened: λ=3 has lower own-time accuracy in 4/8 matched task×K cells | Use qualified stability–plasticity wording only for these cells; broader framing is behavior-fidelity / capability-retention |
+| C5: behavior fidelity and capability retention are different axes | Provisional, not strengthened by WP3: after fixing an order-pooling bug in `plasticity_report.py`, λ=3 own-time degradation appears in only 2/8 matched task×K cells (main order only) | No stability–plasticity wording; use behavior-fidelity / capability-retention framing only |
 | C6: utility weighting is a budget-dependent refinement | Descriptive/provisional: K=2 `ours−ours_uniform` forgetting CI is positive, but global BH-FDR is not significant; buffer composition is shared | Do not claim universal utility benefit |
 | C7: task order changes method behavior | Descriptive/provisional across paired main/reverse outputs; no ranking-reversal claim | Say “task-order dependence” only if qualified/descriptive |
 

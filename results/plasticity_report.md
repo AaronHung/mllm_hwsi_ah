@@ -4,9 +4,9 @@ Zero-compute report from frozen per-seed CSVs. `A[t,t]` is the own-time new-task
 
 ## Interpretation
 
-Own-time plasticity degradation is observed in 4/8 matched task×K cells when increasing λ from 1.0 to 3.0. The paper may use stability–plasticity trade-off only with this qualified scope; do not generalize beyond these cells.
+No consistent own-time plasticity degradation is observed: λ=3.0 is lower than λ=1.0 in only 2/8 matched cells. Use the phrase behavior-fidelity / capability-retention trade-off.
 
-A qualified **stability–plasticity trade-off** is permissible for the matched λ cells above, but the paper must retain the broader behavior-fidelity / capability-retention framing and must not claim a universal monotonic effect.
+Use the phrase **behavior-fidelity / capability-retention trade-off**; do not upgrade it to a stability–plasticity claim.
 
 ## Own-time accuracy
 

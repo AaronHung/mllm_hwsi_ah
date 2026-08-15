@@ -85,8 +85,14 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def lambda_conclusion(df: pd.DataFrame) -> tuple[str, pd.DataFrame]:
+    # The lambda ablation (ablA3a/ablA3b) only exists for order="main"; the
+    # "ours_lambda1" key also matches order="reverse" rows from the full grid.
+    # Restrict to main here so the diff never silently pools the two orders
+    # (main/reverse own-time accuracy must never be pooled, per the report
+    # header and the v0.292 backend-consistency rule).
     lam = df[df["setting_key"].isin(
-        ["ours_lambda0.3", "ours_lambda1", "ours_lambda3"])].copy()
+        ["ours_lambda0.3", "ours_lambda1", "ours_lambda3"])
+        & df["order"].eq("main")].copy()
     if lam.empty:
         return ("No lambda ablation rows were available.", pd.DataFrame())
     pivot = (
