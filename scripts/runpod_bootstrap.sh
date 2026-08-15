@@ -71,6 +71,16 @@ export GIT_USER_NAME=$(printf '%q' "$git_name")
 export GIT_USER_EMAIL=$(printf '%q' "$git_email")
 EOF
     printf 'export PATH=%q:$PATH\n' "$BIN_DIR:$VENV_DIR/bin" >>"$ENV_FILE"
+    # Two-line colored prompt: a fresh container resets /root/.bashrc, so this
+    # lives here (persistent under /workspace) and is re-applied every time
+    # env.sh is sourced. Yellow username, dim separator, cyan full path, git
+    # branch in magenta when inside a repo; the bare `$`/`#` prompt symbol
+    # sits alone on its own line so it is easy to tell commands apart from
+    # output in long scrollback, and easy to copy cleanly.
+    cat >>"$ENV_FILE" <<'PSEOF'
+__mllm_git_branch() { git symbolic-ref --short HEAD 2>/dev/null; }
+export PS1='\[\033[1;33m\]\u\[\033[0m\] \[\033[2m\]|\[\033[0m\] \[\033[1;36m\]\w\[\033[0m\]\[\033[35m\]$(b=$(__mllm_git_branch); [ -n "$b" ] && printf " (%s)" "$b")\[\033[0m\]\n\$ '
+PSEOF
     # The identity is local to this clone; no credential/token is written.
     git -C "$PROJECT_DIR" config user.name "$git_name"
     git -C "$PROJECT_DIR" config user.email "$git_email"
@@ -80,6 +90,7 @@ EOF
     echo "[bootstrap] PROJECT_DIR=$PROJECT_DIR"
     echo "[bootstrap] CAN_ROOT=$CAN_ROOT"
     echo "[bootstrap] python=$VENV_DIR/bin/python"
+    echo "[bootstrap] PS1 updated (yellow user | cyan path (git branch), prompt on its own line)"
 }
 
 install_tmux
