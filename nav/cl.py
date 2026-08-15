@@ -20,6 +20,12 @@ v0.33.1 方法軌（docs/method_gate_v033.md）：
       p(s) ∝ u_state(s)^alpha · d_t(s)^beta，buffer 成員本身不變。
     - M2 (use_eq_pres=True)：distill 槽的 old-policy KL 換成 ε-equivalence
       preservation loss L_eq，只作用在有抽到的 replay state 上。
+
+v0.33.2（Sol+Fable joint red-team patch）：u_state(s) 改為逐 source-task
+chunk 內算 percentile rank（見 chunkwise_percentile_rank），而非整個 buffer
+一起排名——各 task 的 raw counterfactual gain 出自各自獨立的 frozen
+evaluator（class 數、base entropy 不同），全域排名會把 evaluator-scale
+差異誤讀成 state importance。跨 task 的 replay 壓力完全交給 d_t(s)。
 """
 
 from __future__ import annotations
@@ -136,6 +142,34 @@ def percentile_rank(values: np.ndarray) -> np.ndarray:
     return rankdata(values, method="average") / len(values)
 
 
+def chunkwise_percentile_rank(chunks: list[list[TeacherStep]]) -> np.ndarray:
+    """v0.33.2 M1 fix: percentile rank of raw max-gain utility computed
+    WITHIN each source-task buffer chunk, then concatenated in the same
+    order as ``[st for chunk in chunks for st in chunk]`` — the flattened
+    buffer order used everywhere else in `train_navigator_cl` (including
+    `eps_masks`). Each task's counterfactual gain is produced by that
+    task's own frozen evaluator (different class counts, different base
+    entropy), so a single global-buffer percentile would let evaluator-scale
+    differences masquerade as cross-task state importance. All cross-task
+    replay pressure is left to `d_t(s)`.
+    """
+    parts = [percentile_rank(np.array([st.utility for st in chunk], dtype=float))
+             for chunk in chunks if chunk]
+    return np.concatenate(parts) if parts else np.array([], dtype=float)
+
+
+def flatten_task_labels(chunks: list[list[TeacherStep]],
+                        labels: list[str]) -> np.ndarray:
+    """Concatenate one label per state, repeated per chunk, in the exact
+    same flattened order as `chunkwise_percentile_rank` / the training
+    buffer. Used only for the per-source-task sampling-mass diagnostic
+    (v0.33.2 item 5); never consumed by the loss or the sampler's math.
+    """
+    parts = [np.full(len(chunk), label, dtype=object)
+             for chunk, label in zip(chunks, labels) if chunk]
+    return np.concatenate(parts) if parts else np.array([], dtype=object)
+
+
 # ------------------------------------------------------------------ buffer / fisher
 def build_buffer(steps: list[TeacherStep], per_slide: int = 2,
                  cap: int = 512) -> list[TeacherStep]:
@@ -219,7 +253,9 @@ class ImportanceReplaySampler:
     def __init__(self, buffer: list[TeacherStep], device, alpha: float = 1.0,
                 beta: float = 1.0, floor: float = 0.1,
                 refresh_every: int = 50,
-                diag_log: list[dict] | None = None) -> None:
+                diag_log: list[dict] | None = None,
+                u_state: np.ndarray | None = None,
+                task_labels: np.ndarray | None = None) -> None:
         self.buffer = buffer
         self.device = device
         self.alpha = alpha
@@ -227,8 +263,26 @@ class ImportanceReplaySampler:
         self.floor = floor / max(len(buffer), 1)
         self.refresh_every = max(int(refresh_every), 1)
         self.diag_log = diag_log
-        raw_u = np.array([st.utility for st in buffer], dtype=float)
-        self.u_state = percentile_rank(raw_u)
+        if u_state is not None:
+            u_state = np.asarray(u_state, dtype=float)
+            if len(u_state) != len(buffer):
+                raise ValueError(
+                    f"u_state length {len(u_state)} != buffer length "
+                    f"{len(buffer)} — chunk order must match the flattened "
+                    "buffer order (see chunkwise_percentile_rank)")
+            self.u_state = u_state
+        else:
+            # Fallback for standalone callers that never pass chunk-aware
+            # ranks (e.g. ad-hoc scripts): global-buffer percentile. Every
+            # v0.33.2 gate config always passes `u_state` explicitly.
+            raw_u = np.array([st.utility for st in buffer], dtype=float)
+            self.u_state = percentile_rank(raw_u)
+        if task_labels is not None and len(task_labels) != len(buffer):
+            raise ValueError(
+                f"task_labels length {len(task_labels)} != buffer length "
+                f"{len(buffer)}")
+        self.task_labels = (np.asarray(task_labels)
+                           if task_labels is not None else None)
         self.dt_state = np.zeros(len(buffer))
         self.p = np.full(len(buffer), 1.0 / max(len(buffer), 1))
 
@@ -260,8 +314,16 @@ class ImportanceReplaySampler:
                 corr = float(np.corrcoef(self.u_state, dt)[0, 1])
             else:
                 corr = None  # undefined when one side hasn't drifted yet
-            self.diag_log.append(dict(step=int(step), entropy=entropy,
-                                      corr_u_dt=corr))
+            entry = dict(step=int(step), entropy=entropy, corr_u_dt=corr)
+            if self.task_labels is not None:
+                # v0.33.2 item 5: cheap per-refresh diagnostic — reveals if
+                # a stage's replay mass suddenly concentrates on one old
+                # task (e.g. the freshest chunk, whose d_t starts near 0).
+                entry["sampling_mass_by_task"] = {
+                    str(label): float(self.p[self.task_labels == label].sum())
+                    for label in np.unique(self.task_labels)
+                }
+            self.diag_log.append(entry)
 
     def maybe_refresh(self, nav: Navigator, step: int) -> None:
         if step % self.refresh_every == 0:
@@ -292,10 +354,20 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                        drift_refresh_every: int = 50,
                        use_eq_pres: bool = False,
                        eps: float = 0.05,
-                       diag_log: list[dict] | None = None) -> Navigator:
+                       diag_log: list[dict] | None = None,
+                       u_state_override: np.ndarray | None = None,
+                       task_labels: np.ndarray | None = None) -> Navigator:
     """v0.33.1 adds `replay_sampling="importance"` (M1) and `use_eq_pres` (M2)
     behind opt-in kwargs; every Protocol-v1 method keeps its old code path
     (`replay_sampling="uniform"`, `use_eq_pres=False` are the defaults).
+
+    v0.33.2: `u_state_override` should be the caller-precomputed, chunk-wise
+    percentile rank (`chunkwise_percentile_rank`) aligned to `buffer`'s
+    flattened order; `task_labels` (optional) enables the per-source-task
+    sampling-mass diagnostic. If `u_state_override` is omitted while
+    `replay_sampling="importance"`, the sampler falls back to a (less
+    correct, pre-v0.33.2) global-buffer percentile — callers driving a gate
+    config should always pass it.
     """
     if replay_sampling not in ("uniform", "importance"):
         raise ValueError(f"unknown replay_sampling: {replay_sampling!r}")
@@ -327,7 +399,8 @@ def train_navigator_cl(steps: list[TeacherStep], device,
         sampler = ImportanceReplaySampler(
             buffer, device, alpha=sampling_alpha, beta=sampling_beta,
             floor=sampling_floor, refresh_every=drift_refresh_every,
-            diag_log=diag_log)
+            diag_log=diag_log, u_state=u_state_override,
+            task_labels=task_labels)
         sampler.refresh(nav, 0)
 
     global_step = 0

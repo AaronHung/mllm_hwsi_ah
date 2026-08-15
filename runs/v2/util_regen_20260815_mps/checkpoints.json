@@ -1,0 +1,25 @@
+{
+  "completed": [
+    "seed=0|method=distill|K=1",
+    "seed=0|method=distill|K=2",
+    "seed=0|method=ours_uniform|K=1",
+    "seed=0|method=ours_uniform|K=2",
+    "seed=1|method=distill|K=1",
+    "seed=1|method=distill|K=2",
+    "seed=1|method=ours_uniform|K=1",
+    "seed=1|method=ours_uniform|K=2",
+    "seed=2|method=distill|K=1",
+    "seed=2|method=distill|K=2",
+    "seed=2|method=ours_uniform|K=1",
+    "seed=2|method=ours_uniform|K=2"
+  ],
+  "metadata": {
+    "requested": "mps",
+    "torch_version": "2.12.0",
+    "cuda_available": false,
+    "mps_available": true,
+    "mps_fallback": "1",
+    "resolved_device": "mps",
+    "run_tag": "util_regen_20260815_mps"
+  }
+}

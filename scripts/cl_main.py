@@ -9,10 +9,13 @@ Protocol（凍結）見 docs/protocol.md：
       joint-training reference）
     - K ∈ {1,2,4}；seeds {0..4}；指標見 protocol §4
 
-v0.33.1 method-gate configs (docs/method_gate_v033.md; NOT part of the frozen
+v0.33.2 method-gate configs (docs/method_gate_v033.md; NOT part of the frozen
 Protocol-v1 table above): ia_samp / eq_pres / ia_ep / samp_util_only /
 samp_drift_only. Pass them via --methods like any other method key; they
-read nav.cl.METHOD_GATE_KWARGS instead of METHOD_KWARGS.
+read nav.cl.METHOD_GATE_KWARGS instead of METHOD_KWARGS. Gate rows also get
+two utility-axis columns (eps_optimal_mass, normalized_regret) and, for gate
+methods only, real per-stage navigator checkpoints under
+runs/v2/<tag>/ckpt/ (checkpoints.json stays --resume bookkeeping only).
 
 用法：
     python scripts/cl_main.py --dataset can --smoke                  # Mac 煙測
@@ -40,8 +43,10 @@ sys.path.insert(0, str(REPO))
 from nav import add_device_argument, device_info, resolve_device  # noqa: E402
 from nav.candata import COHORTS, CanTask  # noqa: E402
 from nav.cl import (METHOD_GATE_KWARGS, METHOD_KWARGS,  # noqa: E402
-                    attach_boundary_policy, build_buffer, eval_policy_balanced,
-                    fisher_of, jaccard, kl_drift, policy_on_probes,
+                    attach_boundary_policy, build_buffer,
+                    chunkwise_percentile_rank, epsilon_optimal_mask,
+                    eval_policy_balanced, fisher_of, flatten_task_labels,
+                    jaccard, kl_drift, normalized_gain, policy_on_probes,
                     train_navigator_cl, trajectory_utility)
 from nav.engine import teacher_rollout, train_evaluator  # noqa: E402
 from nav.pilot40 import Pilot40  # noqa: E402
@@ -109,7 +114,8 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                  replay_per_slide: int = 2, buffer_cap: int = 512,
                  eval_split: str = "test",
                  run_meta: dict[str, object] | None = None,
-                 diag_log: list[dict] | None = None) -> list[dict]:
+                 diag_log: list[dict] | None = None,
+                 ckpt_dir: Path | None = None) -> list[dict]:
     torch.manual_seed(seed)
     t_start = time.time()
 
@@ -151,11 +157,24 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                                      epochs=nav_epochs, seed=seed)
         else:
             buffer = [st for bb in buffer_by_task for st in bb]
+            gate_extra: dict[str, object] = {}
+            if needs_boundary_policy:
+                # v0.33.2 M1 fix: ranks computed per source-task chunk
+                # BEFORE flattening, then concatenated in the exact same
+                # order as `buffer` above — index alignment with eps_masks
+                # (built from this same `buffer` inside train_navigator_cl)
+                # is guaranteed by construction, not by re-sorting.
+                gate_extra["u_state_override"] = chunkwise_percentile_rank(
+                    buffer_by_task)
+                gate_extra["task_labels"] = flatten_task_labels(
+                    buffer_by_task,
+                    [tasks[i].name for i in range(len(buffer_by_task))])
             nav = train_navigator_cl(
                 steps, device, navigator=nav, epochs=nav_epochs, seed=seed,
                 old_nav=old_nav, buffer=buffer, lam=lam,
                 ewc_terms=ewc_terms if method == "ewc" else None,
-                lam_ewc=lam_ewc, diag_log=diag_log, **method_kwargs)
+                lam_ewc=lam_ewc, diag_log=diag_log, **gate_extra,
+                **method_kwargs)
 
         # ---- 任務結束的 bookkeeping ----
         if method == "ewc":
@@ -166,6 +185,13 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
             # M1 reads d_t(s) against this snapshot in every later stage.
             attach_boundary_policy(buffer_by_task[-1], nav, device)
         old_nav = copy.deepcopy(nav)
+        if ckpt_dir is not None:
+            # v0.33.2 item 4: real weights (stage-boundary == final on the
+            # last stage) so a passing config can be probed post-gate;
+            # checkpoints.json remains --resume bookkeeping, unrelated.
+            ckpt_dir.mkdir(parents=True, exist_ok=True)
+            torch.save(nav.state_dict(),
+                      ckpt_dir / f"{method}_seed{seed}_K{k}_stage{t + 1}.pt")
 
         te_bank = task.banks[eval_split]
         _, _, sel = eval_policy_balanced(te_bank, ev, k, device, "learned",
@@ -191,15 +217,31 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                 n_classes=tasks[j].n_classes)
             jac = float(np.mean([jaccard(sel_at_own[j][sid], sel_now[sid])
                                  for sid in sel_now]))
-            drift = kl_drift(pi_at_own[j], policy_on_probes(nav, probes[j],
-                                                            device))
+            pi_now_j = policy_on_probes(nav, probes[j], device)
+            drift = kl_drift(pi_at_own[j], pi_now_j)
             util = trajectory_utility(bank_j, nav, frozen_evals[j], k, device)
+            # v0.33.2 item 2: utility-axis probe metrics, reusing the same
+            # policy_on_probes forward pass already computed for `drift`
+            # above (no extra forward cost). Aggregation for the gate
+            # verdict (final stage, old tasks only, per-task mean then
+            # macro-average) is pre-registered in docs/method_gate_v033.md;
+            # here we just write the per-stage per-task mean over probe
+            # states, like every other row-level metric.
+            eps_mass_vals, regret_vals = [], []
+            for st, probs in zip(probes[j], pi_now_j):
+                mask = epsilon_optimal_mask(st.gain, eps=0.05)
+                p = probs.numpy()
+                eps_mass_vals.append(float(p[mask].sum()))
+                regret_vals.append(
+                    float(1.0 - (p * normalized_gain(st.gain)).sum()))
             rows.append(dict(
                 method=method, seed=seed, K=k, stage=t + 1,
                 task=tasks[j].name, task_idx=j + 1,
                 bal_acc=round(bal, 4), acc=round(acc, 4),
                 jaccard=round(jac, 4), action_kl=round(drift, 4),
                 sel_utility=round(util, 4),
+                eps_optimal_mass=round(float(np.mean(eps_mass_vals)), 4),
+                normalized_regret=round(float(np.mean(regret_vals)), 4),
                 random_ref=round(random_ref[j], 4),
                 n_test=len(bank_j), wall_s=round(time.time() - t_start, 1),
                 **(run_meta or {})))
@@ -298,11 +340,14 @@ def main():
                     print(f"[resume] skip {key}")
                     continue
                 diag_log: list[dict] = [] if method in METHOD_GATE_KWARGS else None
+                ckpt_dir = (out_dir / "ckpt"
+                           if method in METHOD_GATE_KWARGS else None)
                 rows = run_sequence(tasks, method, seed, k, device,
                                     ev_epochs, nav_epochs,
                                     args.lam, lam_ewc,
                                     args.replay_per_slide, args.buffer_cap,
-                                    run_meta=meta, diag_log=diag_log)
+                                    run_meta=meta, diag_log=diag_log,
+                                    ckpt_dir=ckpt_dir)
                 if diag_log:
                     diag_path = out_dir / f"diag_{method}_seed{seed}_K{k}.json"
                     diag_path.write_text(json.dumps(diag_log, indent=2))
