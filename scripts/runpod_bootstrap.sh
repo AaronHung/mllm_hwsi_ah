@@ -44,6 +44,29 @@ EOF
     return 1
 }
 
+install_rsync() {
+    # Needed on both ends of any Mac -> RunPod data transfer (rsync launches
+    # `rsync --server` remotely over the existing ssh connection); minimal
+    # CUDA base images typically ship without it. Same install pattern as
+    # install_tmux above; a missing rsync only breaks large data uploads
+    # (e.g. pilot40's brca_pilot40_k48/), not training itself, so this is a
+    # best-effort step, not a hard bootstrap failure.
+    if command -v rsync >/dev/null 2>&1; then
+        echo "[bootstrap] rsync=$(command -v rsync)"
+        return 0
+    fi
+    if [[ "$(id -u)" == "0" ]] && command -v apt-get >/dev/null 2>&1; then
+        echo "[bootstrap] rsync missing; attempting apt-get install"
+        if apt-get update -qq && apt-get install -y -qq rsync; then
+            echo "[bootstrap] rsync=$(command -v rsync)"
+            return 0
+        fi
+    fi
+    echo "[bootstrap] WARNING: rsync unavailable and could not be installed" \
+         "(not root, or apt-get failed); large data transfers will need" \
+         "scp instead (no resume support)." >&2
+}
+
 install_python_env() {
     local host_python="${PYTHON_HOST:-python3}"
     if [[ ! -x "$VENV_DIR/bin/python" ]]; then
@@ -94,6 +117,7 @@ PSEOF
 }
 
 install_tmux
+install_rsync
 install_python_env
 write_env_file
 
