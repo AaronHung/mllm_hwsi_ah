@@ -1,12 +1,3 @@
-// Dated snapshot of the live Cursor Canvas, captured 2026-08-16 10:40 (UTC+8).
-// This copy lives in docs/ so it is tracked by git; it does NOT render on its
-// own from this location (Cursor only renders .canvas.tsx files found inside
-// ~/.cursor/projects/<workspace>/canvases/). To view it as the interactive
-// canvas again later, copy it back into that folder, e.g.:
-//   cp docs/research_timeline_20260816.canvas.tsx \
-//      ~/.cursor/projects/Users-aaron-research-01-mllm-hwsi/canvases/research_timeline_20260816.canvas.tsx
-// then open that path in Cursor. See docs/research_timeline_20260816.md for
-// the same content as plain, always-readable Markdown.
 import {
   H1,
   H2,
@@ -154,6 +145,19 @@ const phases: Phase[] = [
     paper:
       "如果紅隊覆核後維持 FAIL，論文誠實走『分析為主 + 附錄報告新方法嘗試』路線：M2 在 utility 指標上有真實、3/3 一致的提升，換來一個邊界性、可能被小樣本雜訊放大的遺忘/新任務學習力代價——這本身是一個可報告的 trade-off，不是方法失敗。",
   },
+  {
+    id: "p8",
+    title: "階段 8 — 紅隊裁定 + Gate v2 延伸驗證（8/16）",
+    status: "completed",
+    what:
+      "Sol、Fable 兩輪 red-team 覆核完 Gate 結果後裁定：M1（ia_samp）、M3（ia_ep）正式退役，不再追；M2（eq_pres）獲得一次、也是最後一次的預先登記延伸驗證——加 2 個新 seed（3、4），把 utility 對照組 ours_uniform 補跑到 K=4（原本從未跑過），跑法完全比照原本 gate 的紀律（先寫死判準、commit 再訓練、19 個訓練單位、Mac MPS、checksum 驗證回填的舊指標）。19 個單位全部跑完，耗時 2 小時 19 分。",
+    why:
+      "原本 3-seed 的 gate 屬於刻意從小規模開始的『篩選』，M2 在 utility 指標上的訊號很一致，但遺忘與新任務學習力的邊界被少數幾格高變異的資料點決定——多兩個 seed 是要看這個訊號撐不撐得住，而不是『考不好再考一次』：判準、門檻、格式全部在跑之前就寫死，且明講『就算過也不能反過來說原本的 gate 判斷錯了』。",
+    result:
+      "GATE v2 仍然 FAIL。好消息：utility 指標這次不只 3/3，是 5/5 個 seed 一致變好，比原本的訊號更強、更值得信任；壞消息：K=1 的遺忘打平沒過（跟原本一樣），而且新增的 2 個 seed 讓兩個原本勉強過關的格子（lung K=4、brca K=2）也跟著沒過——尤其 brca K=2，兩個新 seed 都明顯往壞的方向偏，其中一個差距是量測解析度的 9 倍，不是誤差雜訊。這代表『多加 seed』確實讓訊號更清楚，只是清楚的方向是『這個代價是真的』，不是『原本的擔心是雜訊』。",
+    paper:
+      "M2（eq_pres）正式定案：不會被寫成『論文的新方法』，而是誠實寫成分析章節裡的介入式證據——改一個 loss 讓 policy 不用照抄舊路徑，能換到有效證據保存力的真實提升，但要付出新任務學習力（尤其最後一個、最難的任務）的真實代價。這正是老師想看到的『機制型』結果，只是不是『提出一個更好方法』的敘事。",
+  },
 ];
 
 const pitfalls: [string, string, string][] = [
@@ -198,23 +202,19 @@ interface NextStep {
 const nextSteps: NextStep[] = [
   {
     status: "pending",
-    text: "把 results/method_gate_v0333_verdict.md（含 seed-sensitivity 診斷）交給紅隊（Sol、Fable）做 joint unblinding review — 目前唯一的阻塞點",
+    text: "把 results/method_gate_v2_verdict.md 交給 Aaron / Sol / Fable 做三方 joint unblinding review — 目前唯一的阻塞點；Gate v2 是預先講好的最後一次方法補救運算，不會再加 seed、不會再調參",
   },
   {
     status: "pending",
-    text: "紅隊覆核後三選一：(a) 補測更多 seed 看單一 outlier 是否洗掉、(b) 補跑 ours_uniform 在 K=4 的 probe-only 對照、(c) 直接誠實把 M2 的 utility-axis 提升 vs. 邊界性遺忘/新任務代價寫進論文附錄",
+    text: "三方覆核通過後，把 M2（eq_pres）的介入式證據（utility 提升 vs. capability/plasticity 代價）正式寫進論文分析章節，M1/M3 連同 per-seed 表格寫進附錄（tested-negative）",
   },
   {
     status: "pending",
-    text: "若決定補測並最終通過 → 擴大到 5 seeds×{main,reverse}×K∈{1,2,4} 的 promotion run（deadline 8/23），並決定方法的正式公開名稱",
+    text: "pilot40 sel-utility 稽核已完成（trajectory_utility 在 can/pilot40 定義、正負號、聚合方式完全一致，負值照實解釋，不做美化），可直接引用進論文",
   },
   {
     status: "pending",
-    text: "若維持 FAIL（目前狀態）→ 不重跑、不硬凹，主線維持『分析為主』版本，Track B 嘗試過程寫進附錄（這是 protocol 裡預先承認的有效結果，不算失敗）",
-  },
-  {
-    status: "pending",
-    text: "pilot40 主表（main_table_pilot40_main.md）已產生，接下來拿來跟 can_dataset 主表對照分析，餵進 Gate 1'（8/18，learned policy 是否顯著贏 random）",
+    text: "pilot40 主表已完成並驗證（main_table_pilot40_main.md、G1' 顯著性 8/16 重驗 bit-identical PASS），capability 結論鎖定寫成『在這個小型雙任務設定下未有定論，與 masking 假說一致但未驗證』，不寫『已證實』",
   },
   {
     status: "pending",
@@ -255,7 +255,7 @@ export default function ResearchTimeline() {
           給老師的口頭報告用整理：目前做了什麼、為什麼做、結果如何、跟論文的關係，以及接下來的 scope。
         </Text>
         <Text size="small" tone="quaternary">
-          最後更新：2026-08-16 10:40 (UTC+8)
+          最後更新：2026-08-16 17:55 (UTC+8)
         </Text>
       </Stack>
 
@@ -269,17 +269,16 @@ export default function ResearchTimeline() {
       </Callout>
 
       <Grid columns={4} gap={12}>
-        <Stat value="33 / 33" label="Method gate 已跑完（Mac MPS）" tone="success" />
-        <Stat value="0 / 3" label="M1 / M2 / M3 通過 gate" tone="warning" />
+        <Stat value="33 + 19" label="Method gate + Gate v2 全部跑完（Mac MPS）" tone="success" />
+        <Stat value="0 / 3" label="M1 / M2 / M3 最終通過 gate" tone="warning" />
         <Stat value="2" label="紅隊事前抓到的公式/設計 bug" tone="success" />
         <Stat value="2 / 2" label="資料集完成：can_dataset + pilot40" tone="success" />
       </Grid>
 
-      <Callout tone="warning" title="Gate 結果：三個候選全部 FAIL，M2 最接近，等紅隊覆核">
+      <Callout tone="warning" title="Gate v2 最終結果：M2（eq_pres）仍然 FAIL，utility 訊號更強、代價也更清楚">
         <Text size="small">
-          M2（eq_pres）唯一乾淨通過 utility 指標（g2）與不輸 replay（g3），但 K=1 的遺忘打平（g1）與最後一個任務 brca 的新任務學習力（g4）沒過。
-          診斷發現 18 個 FAIL 子項裡 15 個是「3 個 seed 裡只有 1 個把平均拖過門檻」，不是 3/3 一致——這不會反轉已凍結的判定，但值得紅隊一起看完再決定要不要補測或直接誠實寫進附錄。
-          完整逐格數字見 results/method_gate_v0333_verdict.md。
+          M1、M3 已正式退役。M2 加測 2 個新 seed 後：utility 指標從 3/3 進步到 5/5 個 seed 一致變好（訊號更可信），但 K=1 遺忘打平仍沒過，且新增的 2 個 seed 讓兩個原本邊緣過關的格子（lung K=4、brca K=2）也跟著沒過——不是雜訊被放大，是真訊號被看得更清楚。
+          按三方預先講好的規則，這是最後一次方法補救運算：M2 不會被推廣成論文方法，改為誠實寫進分析章節的介入式證據（機制發現）。完整數字見 results/method_gate_v2_verdict.md，目前等三方（Aaron / Sol / Fable）做 joint unblinding review。
         </Text>
       </Callout>
 
@@ -288,7 +287,7 @@ export default function ResearchTimeline() {
       <Stack gap={4}>
         <H2>時間線：從 Protocol 凍結到現在</H2>
         <Text size="small" tone="secondary">
-          點開每一項看「做了什麼／為什麼／結果／跟論文的關係」。階段 0–5 的公式/backend 問題都是在正式跑實驗「之前」抓到，沒有浪費算力；階段 6–7 是實驗已經跑完後的資料與 verdict。
+          點開每一項看「做了什麼／為什麼／結果／跟論文的關係」。階段 0–5 的公式/backend 問題都是在正式跑實驗「之前」抓到，沒有浪費算力；階段 6–8 是實驗已經跑完後的資料、verdict，以及紅隊裁定後的延伸驗證。
         </Text>
       </Stack>
       <Stack gap={2}>
@@ -311,7 +310,7 @@ export default function ResearchTimeline() {
       <Stack gap={4}>
         <H2>接下來的 scope：還要跑什麼、寫什麼</H2>
         <Text size="small" tone="secondary">
-          前兩項是現在進行式，其餘照順序是等它們跑完之後的必要步驟。
+          第一項（三方 joint review）是目前唯一的阻塞點，其餘依序是等它通過之後的寫作與收尾步驟。
         </Text>
       </Stack>
       <Stack gap={0}>

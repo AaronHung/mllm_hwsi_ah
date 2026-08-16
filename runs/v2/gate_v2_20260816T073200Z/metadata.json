@@ -1,0 +1,12 @@
+{
+  "requested": "mps",
+  "torch_version": "2.12.0",
+  "cuda_available": false,
+  "mps_available": true,
+  "mps_fallback": "1",
+  "resolved_device": "mps",
+  "run_tag": "gate_v2_20260816T073200Z",
+  "git_commit": "22500ef30e3a100321e0aafc68c7babd548de254",
+  "hostname": "aaron-mac.local",
+  "command": "scripts/run_gate_v2.py --device mps --tag gate_v2_20260816T073200Z --resume"
+}

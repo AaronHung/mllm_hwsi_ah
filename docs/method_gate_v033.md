@@ -6,12 +6,20 @@ three main configs GATE FAIL** (`results/method_gate_v0333_verdict.md`,
 2026-08-16, Cursor analysis). That verdict **stands and is never
 reinterpreted.** Per joint Sol+Fable unblinding review (2026-08-16/17):
 `ia_samp` (M1) and `ia_ep` (M3) are **RETIRED** (no further compute); `eq_pres`
-(M2) gets one pre-registered **Gate v2 extension** (§10 below) — a new,
-separately-numbered gate, not a reopening of §0-§8. Track A status: 8/21
-freeze conditions all met 2026-08-16 (pilot40 R6 closed). Pre-registration
-discipline unchanged: each gate version is immutable once its result is read
-(r3); amendments live in new, dated, clearly-versioned sections/changelog
-entries, never silent edits to a frozen section.
+(M2) got its one pre-registered **Gate v2 extension** (§10 below). **Gate v2
+result: GATE FAIL** (`results/method_gate_v2_verdict.md`, 2026-08-16, Cursor
+analysis) — g2 (utility) PASSES cleanly at 5/5 seeds (stronger than the
+original 3/3), g3 (replay safety) PASSES, but g1 (capability) FAILS at K=1
+and g4 (plasticity) newly FAILS at `lung` K=4 and `brca` K=2, in both cases
+because the 2 new seeds **reinforce** rather than wash out the concern (not a
+seed-3/4-only reversal — see changelog for detail). Per §10.5, this was the
+last main-order method-rescue compute regardless of outcome: `eq_pres` is
+retired from promotion and will be reported as an intervention/mechanism
+result. Track A status: 8/21 freeze conditions all met 2026-08-16 (pilot40
+R6 closed). Pre-registration discipline unchanged: each gate version is
+immutable once its result is read (r3); amendments live in new, dated,
+clearly-versioned sections/changelog entries, never silent edits to a frozen
+section.
 
 **v0.33.3 in one line:** a backend-reproduction audit (§5.2) found the
 method-gate's originally planned "CUDA new methods vs. MPS frozen
@@ -680,9 +688,64 @@ is the automated check).
   validated" (not "masking confirmed" — that overclaims from a
   wide-CI-crossing-zero result); `ours_uniform` K=4 backfill is legitimate
   as **post-unblinding comparator completion**, never mislabeled as frozen
-  Protocol-v1. Full transcripts of both rounds are the authority for any
+  Protocol-v1.   Full transcripts of both rounds are the authority for any
   wording dispute; §10 below is the operational translation into a runnable
   spec.
+- **Gate v2 verdict computed (2026-08-16, by Cursor — analysis only, NOT a
+  red-team-reviewed decision, NOT a protocol amendment):** the pre-registered
+  19-unit Mac MPS extension (`runs/v2/gate_v2_20260816T073200Z/`, 2h19m
+  wall-clock, matching the §10.2 estimate) finished cleanly (exit 0, all 19
+  (method,seed,K) cells present, 10 rows each as expected). The seeds{3,4}
+  utility-axis backfill checksummed **8/8 bit-exact** against the frozen
+  `full_s{3,4}.csv`/`ablA1_s{3,4}.csv` rows (`results/
+  util_regen_checksum_v2_seeds34.md`) before being admitted as g2
+  comparators — same reproducibility pattern as every other MPS regen in
+  this project. `scripts/method_gate_v2_verdict.py` applied the §10.1
+  thresholds exactly as frozen, with zero threshold/formula choices made
+  after seeing the results. Full table: `results/method_gate_v2_verdict.md`.
+  - **GATE v2 FAIL for `eq_pres`.** g1=FAIL, g2=**PASS**, g3=PASS, g4=FAIL;
+    §10.3 replication rider **not triggered** on any cell (no PASS cell was
+    carried by a pooled-mean rescue against both new seeds' individual
+    direction — every PASS cell has at least one of seeds 3/4 on the passing
+    side too).
+  - **g2 (utility) came back stronger, not weaker, with the extension:**
+    both `eps_optimal_mass`-higher and `normalized_regret`-lower now hold
+    5/5 seeds (not just the original 3/3) vs BOTH `ours_uniform` and
+    `distill`, at both K=1 and K=2 — the utility-axis effect that motivated
+    Gate v2 in the first place replicated cleanly on the two held-out new
+    seeds.
+  - **g1 (capability) FAILs at K=1 only** (K=2, K=4 PASS) — consistent with
+    the original v0.33.3 finding, not a new problem; new seeds (pooled mean
+    `+0.0056` vs `ours_uniform`, `+0.0026` vs `distill`) confirm rather than
+    reverse the K=1 direction.
+  - **g4 (plasticity) newly FAILs at 2 cells that the original 3-seed
+    screening gate had passed or not clearly failed:** `lung` K=4 (old3
+    mean `-0.0079`, just inside the old -0.01 tolerance; pooled5 with the 2
+    new seeds `-0.0129`, now over) and, more substantially, `brca` K=2 (old3
+    mean `-0.0175`; new2 mean `-0.0590`, with **both** new seeds
+    individually well past the threshold — seed3 `-0.0195`, seed4 `-0.0986`,
+    the latter roughly 9x the cell's own accuracy quantum, not a
+    single-item-flip artifact). **This is the extension doing exactly what
+    it was pre-registered to do:** more seeds sharpened a real signal that a
+    thin 3-seed screen could not resolve, rather than averaging noise away.
+    It does not indicate the new seeds are anomalous — the direction is the
+    same sign as the old seeds at both cells, just larger.
+  - **Per §10.5/§10.6 (pre-committed before this result was seen):** this
+    was the last main-order method-rescue compute for `eq_pres` regardless
+    of outcome. No lambda tuning, no epsilon change, no fail-cell-only
+    reruns were performed or will be performed. `eq_pres` is **not
+    promoted** and is reported as an **intervention/mechanism result** in
+    the main analysis paper (§10.6 FAIL branch): a real, 5/5-seed
+    utility-axis improvement traded against a real, extension-confirmed
+    capability/plasticity cost concentrated at `brca` (the last, hardest
+    task) and `lung` K=4.
+  - **This is an analysis artifact awaiting joint Sol+Fable+Aaron
+    unblinding review** — Cursor has not chosen any further remediation
+    path, retrained anything, or altered any threshold. Per the §10.5
+    scope-discipline clause, there is no pending "next step" compute
+    proposal this time (unlike the v0.33.3 verdict): the extension gate
+    is now closed, and the paper-writing question is how to frame `eq_pres`
+    in the mechanism-analysis section, not whether to run more seeds.
 
 ## 10. Gate v2 — Extension (`eq_pres` only, joint Sol+Fable sign-off,
 2026-08-17)

@@ -1,0 +1,46 @@
+{
+  "completed": [
+    "seed=0|method=ours_uniform|K=4|role=comparator_completion_k4",
+    "seed=1|method=ours_uniform|K=4|role=comparator_completion_k4",
+    "seed=2|method=ours_uniform|K=4|role=comparator_completion_k4",
+    "seed=3|method=distill|K=1|role=utility_backfill_seeds34",
+    "seed=3|method=distill|K=2|role=utility_backfill_seeds34",
+    "seed=3|method=eq_pres|K=1|role=candidate_new",
+    "seed=3|method=eq_pres|K=2|role=candidate_new",
+    "seed=3|method=eq_pres|K=4|role=candidate_new",
+    "seed=3|method=ours_uniform|K=1|role=utility_backfill_seeds34",
+    "seed=3|method=ours_uniform|K=2|role=utility_backfill_seeds34",
+    "seed=3|method=ours_uniform|K=4|role=comparator_completion_k4",
+    "seed=4|method=distill|K=1|role=utility_backfill_seeds34",
+    "seed=4|method=distill|K=2|role=utility_backfill_seeds34",
+    "seed=4|method=eq_pres|K=1|role=candidate_new",
+    "seed=4|method=eq_pres|K=2|role=candidate_new",
+    "seed=4|method=eq_pres|K=4|role=candidate_new",
+    "seed=4|method=ours_uniform|K=1|role=utility_backfill_seeds34",
+    "seed=4|method=ours_uniform|K=2|role=utility_backfill_seeds34",
+    "seed=4|method=ours_uniform|K=4|role=comparator_completion_k4"
+  ],
+  "metadata": {
+    "requested": "mps",
+    "torch_version": "2.12.0",
+    "cuda_available": false,
+    "mps_available": true,
+    "mps_fallback": "1",
+    "resolved_device": "mps",
+    "run_tag": "gate_v2_20260816T073200Z",
+    "git_commit": "22500ef30e3a100321e0aafc68c7babd548de254",
+    "hostname": "aaron-mac.local",
+    "command": "scripts/run_gate_v2.py --device mps --tag gate_v2_20260816T073200Z --resume"
+  },
+  "last_unit": {
+    "method": "ours_uniform",
+    "seed": 4,
+    "K": 2,
+    "role": "utility_backfill_seeds34",
+    "status": "done",
+    "seconds": 339.5,
+    "git_commit": "22500ef30e3a100321e0aafc68c7babd548de254",
+    "backend": "mps",
+    "torch_version": "2.12.0"
+  }
+}

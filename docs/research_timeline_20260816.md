@@ -3,7 +3,9 @@
 > 這份文件回答三個問題：做了什麼、為什麼做、結果如何（成功/失敗/其他），以及這些跟論文的關係。
 > 對應的互動版本是一個 Cursor Canvas（`~/.cursor/projects/.../canvases/research-timeline.canvas.tsx`），
 > 但那個檔案不在 git 追蹤範圍內、只能在 Cursor IDE 裡打開，所以另外存這一份 Markdown 到 `docs/`，
-> 跟著 repo 走、隨時可以搜尋到。內容截至 2026-08-16 10:40 (UTC+8)，接續 `docs/research_timeline_20260815.md`。
+> 跟著 repo 走、隨時可以搜尋到。內容截至 2026-08-16 17:55 (UTC+8)（本文件當天內第二次更新，涵蓋
+> Method Gate v0.33.3 verdict + 紅隊裁定 + Gate v2 延伸驗證的完整結果），接續
+> `docs/research_timeline_20260815.md`。
 >
 > 同一天也存了一份 `.canvas.tsx` 原始碼快照到 `docs/research_timeline_20260816.canvas.tsx`——
 > 那份的排版更好讀，但要複製回 Cursor 的 canvas 資料夾才能重新渲染，檔案開頭有寫怎麼做。
@@ -16,15 +18,21 @@
 影像內證據有冗餘，凍結的預測頭還能靠「矇對」撐住準確率，直到預算被壓得很緊，準確率才跟著垮。這就是
 **navigation forgetting**，也是整篇論文要提出並解決的問題。詳見 `paper/main.tex` 摘要與 Introduction。
 
-## 現況總覽（跟昨天相比的變化）
+## 現況總覽（Track A / Track B 兩行狀態，今天內的變化）
 
-| 項目 | 昨天（8/15） | 今天（8/16） |
+**Track A（論文骨架）：** 8/21 freeze 四條件今日已全部達成（pilot40 R6 已結案，行為層複現、capability
+判定鎖定「在這個小型設定下未有定論」）；下一步是寫作填數字。
+**Track B（新方法 M1/M2/M3）：** 上午跑完 v0.33.3 gate、三候選全 FAIL；下午經 Sol+Fable 兩輪紅隊裁定，
+M1/M3 正式退役，M2（`eq_pres`）跑完最後一次、預先登記的 5-seed 延伸驗證（Gate v2）——**結果仍是 FAIL**，
+`eq_pres` 定案為論文分析章節的介入式證據，不再是候選方法。
+
+| 項目 | 上午（8/16 早上） | 傍晚（8/16 17:55，本次更新） |
 |---|---|---|
-| Mac MPS Method Gate | 16 / 33 units 進行中 | **33 / 33 units 跑完**，g1–g4 verdict 已計算 |
-| Gate 結果 | 未知 | **M1 / M2 / M3 三個候選全部 GATE FAIL**（M2 最接近，見下） |
-| RunPod CUDA pilot40 主網格 | push 待確認 | **已確認 push 到 `origin/main`** |
-| 紅隊事前抓到的公式/設計 bug | 2 | 2（不變） |
-| 下一個阻塞點 | 等 gate 跑完 | **等紅隊（Sol、Fable）joint unblinding review** |
+| Mac MPS Method Gate（v0.33.3） | 33 / 33 units 跑完，g1–g4 verdict 已計算 | 不變，**判定凍結，不再重新解讀** |
+| Gate 結果 | M1/M2/M3 三個候選全部 GATE FAIL | 不變；已由 Sol+Fable 兩輪紅隊覆核，裁定 M1/M3 退役、M2 給一次延伸驗證 |
+| Gate v2（`eq_pres` 專屬延伸） | 尚未開始 | **19 / 19 units 跑完（2h19m），verdict 已計算：GATE v2 FAIL** |
+| pilot40 G1' 顯著性 | 8/14 舊資料 | 8/16 用新 5-seed 主網格重跑，**bit-identical，PASS 不變** |
+| 下一個阻塞點 | 等紅隊 joint unblinding review（v0.33.3） | **等三方（Aaron/Sol/Fable）對 Gate v2 verdict 做 joint unblinding review** |
 
 ## 今天的新進展
 
@@ -55,6 +63,40 @@
   這次 verdict 已寫入 `docs/method_gate_v033.md` 的 changelog，明確標記是 Cursor 做的分析、還沒經過紅隊
   審核，也還沒選定補救方向。
 
+### 階段 8 — 紅隊裁定 + Gate v2 延伸驗證（8/16 下午）— 已完成
+
+- **做了什麼**：把階段 7 的 verdict 交給紅隊後，Sol、Fable 兩輪覆核裁定：`ia_samp`（M1）、`ia_ep`（M3）
+  正式退役，不再追；`eq_pres`（M2）獲得一次、也是**最後一次**的預先登記延伸驗證「Gate v2」——加 2 個新
+  seed（3、4）到 `eq_pres`（K∈{1,2,4}），並把 utility 對照組 `ours_uniform` 補跑到 K=4（Protocol-v1 原本
+  從未在任何 seed 跑過這個組合）。跑法完全比照原本 gate 的紀律：先在 `docs/method_gate_v033.md` §10 寫死
+  新判準並 commit，才開始訓練；19 個訓練單位、Mac MPS、`caffeinate`、atomic-resume；另外自行加了一步
+  「utility-axis 回填」（distill/`ours_uniform` 在新 seed 上補算兩個 v0.33.2 才有的指標欄位），這一步不是
+  新實驗，是把已經凍結的舊數字重新跑一次來補欄位，一樣要通過 `|Δ|<=0.001` checksum 才採用。19 個單位
+  全部跑完，耗時 2 小時 19 分，checksum 8/8 逐位元對上。
+- **為什麼**：原本 3-seed 的 gate 是刻意從小規模開始的「篩選」，`eq_pres` 在 utility 指標上的訊號很一致，
+  但遺忘與新任務學習力的邊界被少數幾格高變異的資料點決定——多兩個 seed 是要看這個訊號撐不撐得住統計力，
+  不是「考不好再考一次」：判準、門檻、報告格式全部在跑之前寫死，且明講「就算過也不能反過來說原本的
+  gate 判斷錯了」。
+- **結果：GATE v2 仍然 FAIL。**
+  - **好消息**：utility 指標（`eps_optimal_mass`↑、`normalized_regret`↓）這次不只 3/3，是**5/5 個 seed
+    全部一致變好**，比原本的訊號更強、更值得信任，vs 兩個對照組（`ours_uniform`、`distill`）在 K=1、K=2
+    都成立。
+  - **壞消息**：K=1 的遺忘打平（g1）仍沒過，跟原本一樣；而且新增的 2 個 seed 讓兩個原本邊緣過關的格子
+    也跟著沒過——`lung` K=4（原本 3-seed 平均 −0.0079，剛好壓在 −0.01 門檻內；加 2 個新 seed 後變成
+    −0.0129，過線）與 `brca` K=2（原本 −0.0175；新 2 個 seed 平均到 −0.0590，且**兩個新 seed 各自**都遠遠
+    超過門檻，其中一個差距是該任務量測解析度的 9 倍，不是單一測試樣本翻面的雜訊）。
+  - 這代表「多加 seed」確實讓訊號更清楚，只是清楚的方向是**「這個代價是真的」**，不是「原本的擔心是
+    雜訊，加了 seed 就會洗掉」——延伸驗證做了它該做的事：把一個 3-seed 螢幕篩選不出來的真訊號看清楚，
+    不管方向是好是壞。
+  - 額外檢查了一條「複製確認」的揭露規則（如果平均過關但兩個新 seed 各自都指向失敗方向，不能算穩健
+    確認）：這次沒有任何一格觸發這條規則——每一個 PASS 的格子，兩個新 seed 至少有一個本身也是通過的。
+- **跟 paper 的關係**：`eq_pres`（M2）正式定案——**不會被寫成論文的新方法**，而是誠實寫進分析章節的
+  介入式證據：改一個 loss 讓 policy 不用照抄舊路徑，換到有效證據保存力的真實提升，但要付出新任務學習力
+  （尤其最後一個、最難的任務 `brca`）的真實代價。這正是老師想看到的「機制型」發現，只是不是「我們提出
+  了一個更好的方法」的敘事——這一點會在跟老師報告時特別說明。完整逐格數字見
+  `results/method_gate_v2_verdict.md`，checksum 明細見 `results/util_regen_checksum_v2_seeds34.md`，兩者
+  都已寫入 `docs/method_gate_v033.md` 的 changelog，標記為 Cursor 分析、待三方 joint unblinding review。
+
 ### 附帶完成：確認 pilot40 已 push 到 `origin/main`
 
 昨天結尾時 RunPod 端的 `git push` 卡在 GitHub 不再接受密碼登入（需要 Personal Access Token）跟 PAT 權限
@@ -79,30 +121,32 @@
 
 ## 接下來的 scope：還要跑什麼、寫什麼
 
-1. **(阻塞點)** 把 `results/method_gate_v0333_verdict.md`（含 seed-sensitivity 診斷）交給紅隊
-   （Sol、Fable）做一次 joint unblinding review。
-2. 紅隊覆核後三選一：(a) 補測更多 seed 看單一 outlier 是否洗掉、(b) 補跑 `ours_uniform` 在 K=4 的
-   probe-only 對照、(c) 直接誠實把 M2 的 utility-axis 提升 vs. 邊界性遺忘/新任務代價寫進論文附錄。
-3. 若決定補測並最終通過 → 擴大到 5 seeds×{main,reverse}×K∈{1,2,4} 的 promotion run（deadline 8/23），
-   並決定方法的正式公開名稱。
-4. 若維持 FAIL（目前狀態）→ 不重跑、不硬凹，主線維持「分析為主」版本，Track B 嘗試過程寫進論文附錄
-   （這是 protocol 裡預先承認的有效結果，不算失敗）。
-5. pilot40 主表（`main_table_pilot40_main.md`）已產生，接下來拿來跟 can_dataset 的主表對照分析，
-   餵進 Gate 1'（8/18，learned policy 是否顯著贏 random）。
-6. Protocol 既定的論文級三道關卡：Gate 2'（8/22，seqft 遺忘是否顯著）、Gate 3'（8/24，ours 是否顯著贏
+1. **(阻塞點)** 把 `results/method_gate_v2_verdict.md`（含 checksum 報告）交給 Aaron / Sol / Fable
+   做一次**三方** joint unblinding review。Gate v2 是預先講好的**最後一次**方法補救運算——不管三方
+   review 的結論是什麼，都不會再加 seed、不會再調參、不會再開 Gate v3。
+2. 三方覆核通過後，把 `eq_pres`（M2）的介入式證據（utility 提升 vs. capability/plasticity 代價）正式
+   寫進論文分析章節；`ia_samp`（M1）、`ia_ep`（M3）連同 per-seed 表格寫進附錄，標記為 tested-negative。
+3. pilot40 sel-utility 稽核已完成：`trajectory_utility` 在 `can_dataset`／pilot40 兩邊的定義、正負號、
+   聚合方式完全一致，pilot40 出現的負值是誠實的量測結果，不做美化解讀，可直接引用進論文。
+4. pilot40 主表（`main_table_pilot40_main.md`）已完成並驗證（G1' 顯著性用新 5-seed 主網格 8/16 重驗，
+   bit-identical PASS）；capability 結論鎖定寫成「在這個小型雙任務設定下未有定論，與 masking 假說一致
+   但未驗證」，禁止寫成「已證實」一類的用語（已加進 `scripts/check_forbidden_phrases.py`）。
+5. Protocol 既定的論文級三道關卡：Gate 2'（8/22，seqft 遺忘是否顯著）、Gate 3'（8/24，ours 是否顯著贏
    seqft）。
-7. Track A 收尾雜項：`paper/main.tex` 內 KL 方向文字、`docs/handoff...` 文件的 cell 編號、補齊 mechanism
+6. Track A 收尾雜項：`paper/main.tex` 內 KL 方向文字、`docs/handoff...` 文件的 cell 編號、補齊 mechanism
    robustness 指標。
-8. 把 paper 草稿裡目前的 `\xx{}` 佔位數字換成最終數字，跑一次 `scripts/check_forbidden_phrases.py`，
+7. 把 paper 草稿裡目前的 `\xx{}` 佔位數字換成最終數字，跑一次 `scripts/check_forbidden_phrases.py`，
    準備投稿 ICASSP 2027。
 
 ## 值得跟老師特別強調的三點
 
 1. 到目前為止抓到的每一個公式/設計漏洞（M1 退化、backend 混淆）都是在正式跑實驗**之前**被紅隊抓到，
    沒有浪費算力，也不需要事後丟棄結果重跑。
-2. Method gate 的判準是**看到結果之前**寫死的，跑完之後**沒有回頭改任何門檻**——即使三個候選都沒過，
-   這個「沒過」的結論本身是可信的，不是選過門檻湊出來的。
+2. Method gate（含 Gate v2 延伸）的判準都是**看到結果之前**寫死的，跑完之後**沒有回頭改任何門檻**——
+   即使 M2 加測 2 個 seed 後依然沒過，這個「沒過」的結論本身是可信的，不是選過門檻湊出來的；而且這次
+   延伸驗證證明了不是統計力不足造成的誤判：utility 訊號變得更強（3/3→5/5），capability/plasticity 的
+   代價也變得更清楚（兩個原本邊緣的格子確定沒過）——兩個方向都被「看得更清楚」，不是被雜訊洗掉。
 3. Track B（新方法 M1/M2/M3）就算最後沒有一個配置通過 gate，也是 protocol 裡**預先承認的有效結果**，
-   論文會誠實在附錄報告，不算失敗——這是實驗設計時就講好的規則，不是事後找台階下。額外做的
-   seed-sensitivity 診斷顯示大部分 FAIL 是單一 seed 造成的邊界情況，值得紅隊一起判斷這代表「方法真的
-   有問題」還是「3 個 seed 對這種效應量太少」，再決定要不要花小成本補測。
+   論文會誠實在分析章節/附錄報告，不算失敗——這是實驗設計時就講好的規則，不是事後找台階下。`eq_pres`
+   換來的「utility 真的變好、但新任務學習力有真代價」本身就是一個值得寫的機制性發現，只是它的定位是
+   「我們理解了為什麼會有這個 trade-off」，不是「我們解決了這個 trade-off」。
