@@ -1,20 +1,5 @@
 # Gate 1 顯著性分析（protocol G1'）
 
-**Provenance note (2026-08-16, Cursor):** in response to Fable's red-flag
-that "pilot40 hasn't started" (it had — see `docs/method_gate_v033.md`
-changelog / commit `45fb7cf` for the separate 5-seed CL main-grid table),
-this G1' significance test was independently rerun end-to-end on Mac MPS
-(`torch==2.12.0`, `python3 scripts/gate1_significance.py --device mps`,
-log: `logs/gate1_significance_20260816.log`, fresh artifacts:
-`runs/v2/gate1_significance_full/`). **Every number below reproduced
-bit-identically** to the original 2026-08-14 run (`git show 2ac6776`).
-This is expected, not a coincidence: this script trains its own
-evaluator+navigator via 5-fold CV directly from `nav.engine`/`nav.pilot40`
-and never touches the M1/M2/M3 continual-learning code in `nav/cl.py` or
-the separate 5-seed pilot40 CL main-grid table — none of the v0.33.1–v0.33.3
-patches could have changed this file's numbers, so no drift was possible.
-The G1' PASS verdict below is reconfirmed, not merely repeated.
-
 ## pilot40（配對單位 = seed × fold）
 
 | K | learned−random | 95% CI | Wilcoxon p | learned−uniform | 95% CI | p |
