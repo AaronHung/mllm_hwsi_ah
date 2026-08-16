@@ -478,6 +478,15 @@ def train_navigator_cl(steps: list[TeacherStep], device,
         # two would silently make a "bit-identical replication" run apply a
         # projected gradient (docs/method_gate_v034.md §2.5 condition 2).
         raise ValueError("use_arbiter and conflict_diag are mutually exclusive")
+    if use_arbiter and ewc_terms:
+        # In the arbiter path the combined `loss` is never backwarded — the
+        # applied gradient is assembled from g_n and g_m only. A term that is
+        # in neither (the EWC penalty is the only one today) would be dropped
+        # silently, so refuse rather than train something mislabelled. No
+        # v0.34 config uses EWC.
+        raise ValueError("use_arbiter does not support ewc_terms: the EWC "
+                         "penalty is in neither L_new nor L_mem and would be "
+                         "silently dropped from the update")
     rng = np.random.default_rng(seed)
     if navigator is None:
         navigator = Navigator(low_dim=steps[0].low.shape[1],
