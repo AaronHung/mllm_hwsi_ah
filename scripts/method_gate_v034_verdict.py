@@ -161,14 +161,21 @@ def check_instrumentation_batch(dev: pd.DataFrame) -> tuple[bool, list[str]]:
         return False, lines
     frozen = bitexact_load_frozen("eq_pres", SEEDS)
     frozen = frozen[frozen.seed.isin(SEEDS) & frozen.K.isin(KS)]
-    findings, n_bad = bitexact_compare(new, frozen, "eq_pres_diag", "eq_pres")
+    findings, n_bad, gaps = bitexact_compare(new, frozen, "eq_pres_diag",
+                                             "eq_pres")
     ok = n_bad == 0
     lines += [
         f"Rule: exact equality on `{'`, `'.join(METRIC_COLS)}`. "
         "Any mismatch discards the entire batch — no partial admission.", "",
         f"- rows compared: **{len(findings)}**",
         f"- identical: **{len(findings) - n_bad}**",
-        f"- mismatched: **{n_bad}**", "",
+        f"- mismatched: **{n_bad}**",
+        ("- not comparable (frozen row predates the column, no "
+         "checksum-verified backfill): "
+         + "; ".join(f"`{c}` on {n} row(s)" for c, n in sorted(gaps.items()))
+         if gaps else
+         "- not comparable: none — every metric column had a frozen value"),
+        "",
         ("**ADMITTED — bit-identical to the frozen `eq_pres` rows.** The "
          "conflict statistics from this batch are a direct measurement of the "
          "diagnosed config itself." if ok else
