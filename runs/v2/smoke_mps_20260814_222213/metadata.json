@@ -1,0 +1,9 @@
+{
+  "requested": "mps",
+  "torch_version": "2.12.0",
+  "cuda_available": false,
+  "mps_available": true,
+  "mps_fallback": "1",
+  "resolved_device": "mps",
+  "run_tag": "smoke_mps_20260814_222213"
+}

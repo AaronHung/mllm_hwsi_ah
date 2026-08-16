@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/Users/aaron/research/01_mllm_hwsi/mllm_hwsi_ah/scripts/cl_main.py", line 25, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'

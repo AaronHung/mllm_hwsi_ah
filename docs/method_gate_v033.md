@@ -1,11 +1,13 @@
 # Method gate v0.33.3 — pre-registration
 
-**Status:** committed BEFORE any gate training run (v0.33.3 revision r1
-applies — see Changelog; no gate training has been run under any definition
-of M1, and under no backend design, as of this commit). Pre-registration
-discipline: this file is immutable once any gate result below has been read
-by anyone (r3); further changes require a new gate version, reported as
-such.
+**Status:** the pre-registration below (§0-§8) was committed BEFORE any gate
+training run, per r1/r3, and is now immutable (a gate result has been read —
+see the "Gate verdict computed" changelog entry). **Gate verdict: all three
+main configs GATE FAIL, per `results/method_gate_v0333_verdict.md`, computed
+2026-08-16 by Cursor; awaiting joint Sol+Fable unblinding review before any
+remediation or promotion decision.** Pre-registration discipline: this file
+is immutable once any gate result below has been read by anyone (r3); further
+changes require a new gate version, reported as such.
 
 **v0.33.3 in one line:** a backend-reproduction audit (§5.2) found the
 method-gate's originally planned "CUDA new methods vs. MPS frozen
@@ -603,3 +605,41 @@ is the automated check).
   proceed immediately and in parallel; the process stops at the gate
   verdict for joint unblinding review, with no promotion runs before that
   review.
+- **Gate verdict computed (2026-08-16, by Cursor — analysis only, NOT a
+  red-team-reviewed decision, NOT a protocol amendment):** the 33-unit Mac
+  MPS gate (`runs/v2/method_gate_v0333_run1/`) finished; `scripts/
+  method_gate_verdict.py` applied the g1–g4 thresholds exactly as frozen
+  above, against the frozen Protocol-v1 `distill`/`replay`/`ours_uniform`
+  rows and the checksum-verified MPS `util_regen` backfill (§5.2), with
+  **zero threshold or formula choices made after seeing the results**.
+  Full table: `results/method_gate_v0333_verdict.md`.
+  - **All three main configs (`ia_samp`/M1, `eq_pres`/M2, `ia_ep`/M3) GATE
+    FAIL** as pre-registered. `eq_pres` is the closest: **g2 PASS** (clean,
+    sign-consistent 3/3-seed utility-axis win — higher `eps_optimal_mass`,
+    lower `normalized_regret` — vs both comparators at K=1 and K=2) and
+    **g3 PASS** (not worse than `replay` at any K), but **g1 FAIL** (only
+    at K=1) and **g4 FAIL** (own-time accuracy on `brca`, the last task, at
+    both K=1 and K=2).
+  - **Disclosed data gap:** frozen `ours_uniform` was never run at K=4 in
+    Protocol-v1 (all 5 archived seeds are K∈{1,2} only) — every g1/g4
+    sub-check against `ours_uniform` at K=4 is reported **N/A**, not
+    silently passed, per r1 (no new comparator training at verdict time).
+  - **Seed-sensitivity diagnostic (informational, does not overturn the
+    pre-registered verdict):** of the 18 individual FAIL sub-checks across
+    g1/g4, **15 are single- or partial-seed-driven** (1 of 3 seeds flips an
+    otherwise-passing mean past threshold), not a consistent 3/3 signal —
+    e.g. `eq_pres` K=1 `brca` A[t,t] is bit-identical to `ours_uniform` for
+    seeds 0,1 and only diverges on seed 2. This is disclosed as a candid
+    read on statistical power (3 seeds x `n_test=15`), not as grounds to
+    override g1/g4 as written.
+  - **This is an analysis artifact awaiting joint Sol+Fable unblinding
+    review, per the r1/r3 process** — Cursor has not chosen a remediation
+    path, retrained anything, or altered any threshold. Candidate next
+    steps (listed in `results/method_gate_v0333_verdict.md`, all
+    conditional on red-team sign-off before any new compute): widen the
+    seed set on the FAIL cells to check for noise-washout; backfill
+    `ours_uniform` at K=4 to close the N/A gap; investigate whether the
+    `brca`/last-task plasticity dip is training-order noise rather than an
+    M1/M2-specific effect; or, if the verdict holds, report `eq_pres` as an
+    honest negative/mixed appendix result (real utility-axis gain traded
+    against a borderline, seed-sensitive forgetting/plasticity cost).

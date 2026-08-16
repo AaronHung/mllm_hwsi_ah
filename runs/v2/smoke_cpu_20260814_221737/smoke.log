@@ -1,0 +1,5 @@
+device = cpu | torch = 2.12.0 | MPS fallback = 1
+λ_ewc = 100.0
+[seqft seed0 K=1] AA=0.917 T1(bal=1.000, jac=0.25, kl=0.230) (1s)
+[ours seed0 K=1] AA=0.917 T1(bal=1.000, jac=0.50, kl=0.045) (1s)
+done -> /Users/aaron/research/01_mllm_hwsi/mllm_hwsi_ah/runs/v2/smoke_cpu_20260814_221737/cl_main_can_main_smoke_cpu_20260814_221737.csv

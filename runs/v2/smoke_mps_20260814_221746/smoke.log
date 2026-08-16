@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/Users/aaron/research/01_mllm_hwsi/mllm_hwsi_ah/scripts/cl_main.py", line 307, in <module>
+    main()
+  File "/Users/aaron/research/01_mllm_hwsi/mllm_hwsi_ah/scripts/cl_main.py", line 214, in main
+    device = resolve_device(args.device)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/aaron/research/01_mllm_hwsi/mllm_hwsi_ah/nav/device.py", line 66, in resolve_device
+    raise RuntimeError(
+RuntimeError: requested device='mps' is unavailable; cuda=False mps=False
