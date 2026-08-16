@@ -110,6 +110,22 @@ def load_pilot_tasks(seed: int, smoke: bool) -> list[TaskSpec]:
 
 
 # --------------------------------------------------- v0.34 arbiter logging
+def reset_arbiter_log(arbiter_dir: Path, method: str, seed: int,
+                      k: int) -> None:
+    """Clear one unit's arbiter artifacts before its first stage writes.
+
+    Both files are append-mode, and `run_sequence` is exactly one unit, so
+    without this an atomic resume that re-runs an interrupted unit would
+    append a second copy of every stage — silently double-counting the
+    conflict statistics. The CSV is protected by the verdict script's
+    drop_duplicates(keep="last"); this is the equivalent for the logs.
+    """
+    stem = f"{method}_seed{seed}_K{k}"
+    for path in (arbiter_dir / f"{stem}.jsonl",
+                 arbiter_dir / f"arbiter_summary_{stem}.json"):
+        path.unlink(missing_ok=True)
+
+
 def write_arbiter_log(arbiter_dir: Path, method: str, seed: int, k: int,
                       stage: int, records: list[dict]) -> dict[str, object]:
     """Persist one stage's per-update conflict diagnostics.
@@ -164,6 +180,8 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                  arbiter_dir: Path | None = None) -> list[dict]:
     torch.manual_seed(seed)
     t_start = time.time()
+    if arbiter_dir is not None and method in ARBITER_CONFIGS:
+        reset_arbiter_log(arbiter_dir, method, seed, k)
 
     # v0.33.1 method-gate configs (docs/method_gate_v033.md) live in
     # METHOD_GATE_KWARGS, never in the frozen METHOD_KWARGS table.
