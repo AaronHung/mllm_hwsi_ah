@@ -241,6 +241,26 @@ RUN_TAG="$RUN_TAG" RUN_ROOT="$RUN_ROOT" DEVICE=cuda \
 
 如果你想確認 `Ctrl-b` 到底有沒有送進去,可以直接改用 `tmux detach-client` 那行文字指令,一定有效。
 
+### ⚠️ 千萬不要用 Ctrl-C 代替 detach(2026-08-17 實際踩到,Mac 端)
+
+`Ctrl-b d` 沒反應時,很自然的下一個反射動作是按 `Ctrl-C` 想「跳出來」。**不要。**
+`Ctrl-C` 送的是 SIGINT,收件人是那個 pane 的前景程序,也就是你正在跑的那個跑批本身——
+它會被當場中斷,而不是讓你離開 tmux。v0.34 development gate 就是這樣掉了一個進行中的 unit
+(還好 runner 是 atomic resume,只掉當下那一個,重下同一條指令就接回去了)。
+
+正確做法,由好到壞:
+
+1. **根本不要 attach**。監看用唯讀的方式,在一般終端機下
+   `bash scripts/watch_run.sh <tag>` 或 `tail -f logs/<tag>.log`——這兩個怎麼 Ctrl-C 都只會停掉
+   監看本身,碰不到跑批。
+2. 真的 attach 進去了,要離開就打 `tmux detach-client`(文字指令,按 Enter)。
+3. 真的要停跑批,用 `tmux kill-session -t <session>` 或 `pkill -f <runner>.py`,
+   而且盡量停在 unit 與 unit 之間。
+
+長跑批的 launcher script 建議在開頭加 `trap '' INT`(被忽略的 signal disposition 會跨 exec
+繼承下去,所以 `caffeinate` 跟 `python` 子程序一起被保護),這樣誤按 Ctrl-C 就完全無害。
+v0.34 的 launcher 已經這樣做了。
+
 ## 二、pilot40 資料沒上傳的問題
 
 錯誤是對的、也在預期範圍內——`FileNotFoundError: .../data/pilot40_selection.csv`。原因：
