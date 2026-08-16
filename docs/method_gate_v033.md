@@ -1,13 +1,17 @@
 # Method gate v0.33.3 — pre-registration
 
-**Status:** the pre-registration below (§0-§8) was committed BEFORE any gate
-training run, per r1/r3, and is now immutable (a gate result has been read —
-see the "Gate verdict computed" changelog entry). **Gate verdict: all three
-main configs GATE FAIL, per `results/method_gate_v0333_verdict.md`, computed
-2026-08-16 by Cursor; awaiting joint Sol+Fable unblinding review before any
-remediation or promotion decision.** Pre-registration discipline: this file
-is immutable once any gate result below has been read by anyone (r3); further
-changes require a new gate version, reported as such.
+**Status:** §0-§8 below (the v0.33.3 gate) was committed BEFORE any gate
+training run, per r1/r3, and is immutable — its result has been read: **all
+three main configs GATE FAIL** (`results/method_gate_v0333_verdict.md`,
+2026-08-16, Cursor analysis). That verdict **stands and is never
+reinterpreted.** Per joint Sol+Fable unblinding review (2026-08-16/17):
+`ia_samp` (M1) and `ia_ep` (M3) are **RETIRED** (no further compute); `eq_pres`
+(M2) gets one pre-registered **Gate v2 extension** (§10 below) — a new,
+separately-numbered gate, not a reopening of §0-§8. Track A status: 8/21
+freeze conditions all met 2026-08-16 (pilot40 R6 closed). Pre-registration
+discipline unchanged: each gate version is immutable once its result is read
+(r3); amendments live in new, dated, clearly-versioned sections/changelog
+entries, never silent edits to a frozen section.
 
 **v0.33.3 in one line:** a backend-reproduction audit (§5.2) found the
 method-gate's originally planned "CUDA new methods vs. MPS frozen
@@ -643,3 +647,165 @@ is the automated check).
     M1/M2-specific effect; or, if the verdict holds, report `eq_pres` as an
     honest negative/mixed appendix result (real utility-axis gain traded
     against a borderline, seed-sensitive forgetting/plasticity cost).
+- **Red-team unblinding review, round 1 (2026-08-16, Fable + Sol +
+  Fable-final, external, not Cursor):** independently re-verified the
+  verdict computation (no arithmetic errors found), then reframed the
+  result. Two flagged process items, both resolved same-day: (1) a Fable
+  flag that WP5 `pilot40` "had not started" was checked against the repo
+  and found to be **a stale-information false alarm** — `pilot40`'s main
+  grid had completed and been pushed on 8/15 (commit `45fb7cf`), one day
+  before the flag; (2) the existing pilot40 Gate-1' significance result
+  predated that same run by one day, so it was rerun end-to-end
+  (`results/gate1_significance.md`, commit `05ab259`) and reproduced
+  **bit-identically**, confirmed structurally impossible to have been
+  affected (independent code path, never touches `nav/cl.py`). Substantive
+  ruling: `ia_samp` (M1) and `ia_ep` (M3) **RETIRED** — no axis improvement,
+  multiple 3/3-seed-consistent FAILs, RETIRE without further compute.
+  `eq_pres` (M2) reframed as **intervention evidence, not just an analysis
+  artifact**: it shows a fully sign-consistent utility-axis improvement
+  (3/3 seeds, both K, both comparators) traded against reduced behavior
+  fidelity (Jaccard down, action-KL up — expected by design, since the loss
+  explicitly permits non-exact-imitation actions), with capability/
+  plasticity margins decided by a handful of high-variance cells rather
+  than a consistent signal. Sol's focused correction (accepted by Fable):
+  do **not** justify a rescue run by claiming the g4 threshold sits below
+  measurement resolution (g4 already averages over 3 seeds, so its
+  effective resolution is finer than any single-seed accuracy quantum —
+  Fable's own §-heading claiming otherwise is **retracted**); the correct,
+  defensible justification is that v0.33.3 was an intentionally small
+  3-seed **screening** gate and `eq_pres`'s effect-size estimate warrants a
+  pre-registered, seed-fixed extension for stability, not a redesign of the
+  gate. Also ruled: pilot40 capability findings must be worded "unresolved
+  in this small two-task validation setting; consistent with masking, not
+  validated" (not "masking confirmed" — that overclaims from a
+  wide-CI-crossing-zero result); `ours_uniform` K=4 backfill is legitimate
+  as **post-unblinding comparator completion**, never mislabeled as frozen
+  Protocol-v1. Full transcripts of both rounds are the authority for any
+  wording dispute; §10 below is the operational translation into a runnable
+  spec.
+
+## 10. Gate v2 — Extension (`eq_pres` only, joint Sol+Fable sign-off,
+2026-08-17)
+
+**Non-retroactivity clause.** The v0.33.3 gate (§0-§8) and its FAIL verdict
+for all three configs are **frozen and never reinterpreted**. Gate v2 is a
+**newly declared extension gate**, scoped to `eq_pres` only. It does not
+reopen, re-score, or retroactively pass/fail anything decided under §6.
+Framing (per Sol's correction, replacing an earlier, now-retracted "gate
+threshold sits below measurement resolution" justification): v0.33.3 was an
+intentionally small 3-seed **screening** gate; `eq_pres` showed a fully
+sign-consistent utility-axis improvement while its capability/plasticity
+margins were decided by a few high-variance cells; v2 raises effect-estimate
+stability with 2 more, pre-committed seeds. This is **not** a claim that
+v0.33.3 was mis-designed, and **not** a claim that any threshold sat below
+instrument resolution.
+
+### 10.1 Old -> v2 criteria mapping (explicit, nothing silently changed)
+
+| axis | v0.33.3 (§6, frozen, unchanged) | Gate v2 (new, this section) |
+|---|---|---|
+| capability (g1) | 3-seed paired mean `dForgetting <= 0` vs `ours_uniform` AND `distill`, per K, **plus** 3/3-seed non-worse at K∈{1,2} | **Pooled 5-seed** paired mean `dForgetting <= 0` vs both comparators, per K — **mean-only**; the old 3/3-seed clause is replaced by the §10.3 replication rider, not by a looser mean rule |
+| utility (g2) | >= 1 axis (capability/behavior/utility), 3/3-seed sign-consistent vs both comparators, K=1 or K=2 | **Utility axis only** (`eps_optimal_mass`/`normalized_regret`), **>=4/5 seeds** improvement direction vs BOTH comparators, K=1 or K=2. *This is a new extension criterion defined after the v0.33.3 gate was unblinded; it does not retroactively modify the original 3/3 criterion.* |
+| replay safety (g3) | pooled/3-seed mean `dForgetting` vs `replay` `<= +0.005` | **Unchanged**: 5-seed pooled mean `dForgetting` vs `replay` `<= +0.005` |
+| plasticity (g4) | per `(task,K)` 3-seed paired mean `dA[t,t] >= -0.01` vs `ours_uniform` | **Unchanged threshold**, extended to **5-seed** paired mean per `(task,K)` cell. Each cell footnoted with its per-task test-set accuracy quantum (`1/n_test`) — **descriptive only**, not used to argue the threshold is wrong (Sol's correction, §9 changelog above) |
+
+`eq_pres` seeds 0-2 are **not rerun** — they are the same frozen v0.33.3
+rows. Seeds 3,4 are new. All four criteria are reported three ways (§10.4).
+
+### 10.2 Runs (Mac MPS, `tmux` + `caffeinate`, atomic resume, fresh tags,
+checkpoints ON)
+
+| # | units | what | status |
+|---|---|---|---|
+| 1 | 6 | `eq_pres`, seeds **{3,4}** x K∈{1,2,4}, main order | genuinely new candidate-arm training |
+| 2 | 5 | `ours_uniform`, seeds **{0..4}** x **K=4**, main order | genuinely new — Protocol-v1 never ran this method at K=4 for any seed. Labeled **"post-unblinding comparator completion for Gate-v2"** everywhere in tables/audit text; never labeled frozen Protocol-v1 (Sol §8 ruling) |
+| 3 | 8 | `distill` + `ours_uniform`, seeds **{3,4}** x K∈{1,2}, main order | **not new experiments** — `bal_acc`/Forgetting/Jaccard/action-KL for these (method,seed,K) cells are already frozen (`..._full_s{3,4}.csv`, `..._ablA1_s{3,4}.csv`); this rerun only exists to backfill the `eps_optimal_mass`/`normalized_regret` columns those frozen rows predate (same v0.33.2 §5.2 technique already checksum-verified for seeds 0-2, extended verbatim to seeds 3-4). **Gated by the same `|Δ|<=0.001` checksum** against those frozen rows before any utility value from this rerun is trusted as a g2 comparator. Disclosed here, not in the original red-team prompt text, because without it g2's "new2"/"pooled5" columns would be structurally N/A for `eq_pres` vs these two comparators — it is data-completeness infrastructure, not a new analysis choice, and follows the same legitimacy test Sol applied to run #2 (missingness is pre-existing coverage, not motivated by an observed bad number, and checksum-gated). |
+
+Total: **19 units**, all Mac MPS. Estimated from the actual v0.33.3
+per-unit wall-clock (`eq_pres` K∈{1,2,4}: 184/348/693s; `ours_uniform`/
+`distill` K∈{1,2}: ~240-500s): **~2.5h** wall-clock, within the ~3-4h Sol/
+Fable estimated.
+
+### 10.3 Replication rider (disclosure rule, hard for promotion)
+
+If the pooled 5-seed result PASSES a criterion but **both** new seeds (3
+and 4) individually move toward failure on that same critical metric/cell,
+the result must **not** be called a robust confirmation and `eq_pres` is
+**NOT promoted** on the strength of that criterion, regardless of the
+pooled mean. This is checked and reported per g1/g4 cell in
+`results/method_gate_v2_verdict.md`, not silently absorbed into the pooled
+number.
+
+### 10.4 Reporting
+
+Every criterion (g1, g2, g3, g4) is reported **three ways**: **old3**
+(seeds 0-2, i.e. the already-unblinded v0.33.3 numbers, unchanged), **new2**
+(seeds 3-4 alone), **pooled5** (all 5 seeds) — so a reader can see whether
+seeds 3-4 confirm or merely average-rescue the old direction, per Sol's
+explicit anti-cherry-pick requirement (§9). **Pooled5 is primary** for the
+pass/fail call; **old3/new2 are secondary evidence**, always shown
+alongside, never omitted. In addition: 95% bootstrap CI (`paired_stats_pack.
+bootstrap_ci`, `n_boot=10000`, same convention as elsewhere in this repo) is
+reported for every pooled mean as an **uncertainty rider only** — explicitly
+**not** a pass/fail test, per Sol's ruling against growing a second
+hypothesis-testing regime alongside the estimation-first policy. Each g4
+cell is footnoted with its per-task test-set accuracy quantum
+(`1/n_test`, descriptive only).
+
+### 10.5 Seed fixation / scope discipline
+
+Seeds 3 and 4 are fixed now, run together in one command, no seed-by-seed
+peeking or early stopping. **This is the last main-order method-rescue
+compute for this paper cycle**, regardless of outcome: no lambda tuning, no
+epsilon change, no fail-cell-only reruns, no new modules/losses.
+
+### 10.6 Branches
+
+- **PASS** (per §10.1 thresholds, with the §10.3 rider not triggered) ->
+  `eq_pres` reverse-order promotion run: 5 seeds x K∈{1,2,4}, Mac MPS,
+  labeled "Gate-v2 promotion." Method line named toward
+  "equivalence-preserving continual evidence navigation"; the naming
+  collision check (originally 8/18, deferred by Fable to trigger on v2
+  PASS) runs at this point.
+- **FAIL** (or PASS with the §10.3 rider triggered) -> `eq_pres` is reported
+  as an **intervention/mechanism result** in the main analysis paper (not a
+  promoted method): a real, disclosed utility-axis improvement traded
+  against a capability/plasticity cost that a 5-seed extension could not
+  resolve as parity. No further method-rescue compute.
+
+STOP after `results/method_gate_v2_verdict.md` is written, for joint
+Sol+Fable+Aaron unblinding review. **No promotion runs before that review**,
+regardless of which branch the numbers point to.
+
+### 10.7 Carry-over (zero compute, same commit train)
+
+1. **Pilot40 sel-utility audit:** `trajectory_utility()` (`nav/cl.py`) is
+   called identically for `can` and `pilot40` — same function, same
+   `run_sequence` code path (`scripts/cl_main.py`), zero dataset-specific
+   branching; sign convention (`loss_now - loss_next`, positive = the
+   zoomed-in evidence reduced cross-entropy loss) is defined once and
+   applies to both datasets by construction, not by convention duplicated
+   in two places. **Conclusion: definition/sign/aggregation-identical.**
+   pilot40's `sel_utility` column is legitimately negative in several
+   (method, K) cells (evaluator/case-specific evidence choices that raise
+   rather than lower loss are a real, non-buggy possible outcome of the
+   same formula) — kept as-is, explained honestly in any paper table, never
+   re-signed or re-normalized for cosmetics, per Sol/Fable's explicit
+   instruction.
+2. **Paper wording locks** (apply when paper prose reaches these claims;
+   `paper/main.tex` does not yet contain pilot40-capability or M1/M3 prose
+   to retrofit as of this commit — locked here so the first draft is
+   correct on arrival): pilot40 capability = *"unresolved in this small
+   two-task validation setting; consistent with masking, not validated"*
+   (never *"masking confirmed"* or *"validated"*). `ia_samp` (M1) and
+   `ia_ep` (M3) = **RETIRED**, reported in the appendix as tested-negative
+   with their full per-seed tables (never silently dropped). Two new
+   patterns added to `scripts/check_forbidden_phrases.py` to make the first
+   lock machine-checked (`masking confirmed`, bare `pilot40.*validated`
+   without a negation cue nearby).
+3. **Milestone report format:** every future Track A/B milestone report
+   (chat or doc) opens with a two-line status header — one line each for
+   Track A and Track B current state — so a reader never has to infer
+   "not mentioned" as "not done" (the direct process fix for the 8/16
+   pilot40 false-alarm flag). Applied starting with this document's Status
+   line above and the report accompanying this commit.

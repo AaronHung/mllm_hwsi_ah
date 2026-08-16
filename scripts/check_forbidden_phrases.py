@@ -46,6 +46,12 @@ FORBIDDEN = [
     (r"\bexact[\s-]action\s+preservation\b",
      "distill is old-policy/policy-fidelity distillation, not exact-action "
      "preservation (docs/audit_20260815.md)"),
+    (r"masking\s+(?:is\s+)?confirmed",
+     "pilot40 capability wording lock (docs/method_gate_v033.md §10.7, "
+     "Gate v2 red-team ruling): report as 'unresolved in this small "
+     "two-task validation setting; consistent with masking, not validated' "
+     "— never 'masking confirmed' (wide-CI-crossing-zero result overclaims "
+     "confirmation)"),
 ]
 
 # A match preceded by one of these cues (within NEGATION_WINDOW chars on the
