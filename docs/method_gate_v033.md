@@ -747,6 +747,26 @@ is the automated check).
     is now closed, and the paper-writing question is how to frame `eq_pres`
     in the mechanism-analysis section, not whether to run more seeds.
 
+- **v0.34 opened; §10.5/§10.6 method-compute clause superseded (2026-08-16,
+  joint Aaron+Sol+Fable sign-off, external decision — this entry is a
+  pointer, not a re-scoring):** the joint review ratified the Gate v2 FAIL
+  verdict in full and then, on PI decision, opened a **new** pre-registered
+  method track, `docs/method_gate_v034.md`, on the grounds that Gate v2
+  produced a specific, mechanistic, fixable diagnosis (utility preserved
+  5/5 seeds; preservation gradients conflicting with new-task acquisition)
+  rather than a random failure. **Nothing in §0-§10 of this document
+  changes.** The Gate v2 verdict remains **FAIL** and is never
+  reinterpreted; `eq_pres` remains **unpromoted** and enters v0.34 only as a
+  frozen diagnostic precursor (no rerun as a candidate, no re-scoring, no
+  lambda/epsilon tuning, no fail-cell-only reruns). What is superseded is
+  strictly the reading of §10.5's "last main-order method-rescue compute"
+  and §10.6's "No further method-rescue compute" as a ban on any subsequent
+  hypothesis-driven method work; v0.34 carries its own one-shot config set
+  (three configs, no fourth), its own hard calendar stops, and an explicit
+  "no v0.35 for this ICASSP submission regardless of outcome" clause. Full
+  amendment text, criteria, and sign-off chain: `docs/method_gate_v034.md`
+  §0-§1.
+
 ## 10. Gate v2 — Extension (`eq_pres` only, joint Sol+Fable sign-off,
 2026-08-17)
 
@@ -762,6 +782,14 @@ margins were decided by a few high-variance cells; v2 raises effect-estimate
 stability with 2 more, pre-committed seeds. This is **not** a claim that
 v0.33.3 was mis-designed, and **not** a claim that any threshold sat below
 instrument resolution.
+
+(Provenance note, added 2026-08-16 CST while opening v0.34: this section's
+header date follows the sign-off text as written, whereas the Gate v2 runs
+themselves executed on 2026-08-16 CST under the UTC run tag
+`gate_v2_20260816T073200Z`. Recorded here for the audit trail only — no
+criterion, threshold, number, or verdict in §10 is changed by this note.
+Repo-wide convention going forward, stated in `docs/method_gate_v034.md`:
+document dates are local CST calendar dates, run tags are UTC timestamps.)
 
 ### 10.1 Old -> v2 criteria mapping (explicit, nothing silently changed)
 
