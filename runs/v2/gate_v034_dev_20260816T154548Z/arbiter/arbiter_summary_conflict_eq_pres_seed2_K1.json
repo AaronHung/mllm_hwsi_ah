@@ -1,0 +1,44 @@
+[
+  {
+    "method": "conflict_eq_pres",
+    "seed": 2,
+    "K": 1,
+    "stage": 2,
+    "updates": 7740,
+    "conflict_fraction": 0.479974,
+    "cos_mean": 0.00322,
+    "cos_median": 0.005676,
+    "cos_min": -0.655839,
+    "cos_max": 0.677843,
+    "proj_ratio_mean_all": 0.053884,
+    "proj_ratio_mean_conflict": 0.112265
+  },
+  {
+    "method": "conflict_eq_pres",
+    "seed": 2,
+    "K": 1,
+    "stage": 3,
+    "updates": 6160,
+    "conflict_fraction": 0.492045,
+    "cos_mean": 0.005924,
+    "cos_median": 0.001744,
+    "cos_min": -0.581352,
+    "cos_max": 0.563883,
+    "proj_ratio_mean_all": 0.044149,
+    "proj_ratio_mean_conflict": 0.089725
+  },
+  {
+    "method": "conflict_eq_pres",
+    "seed": 2,
+    "K": 1,
+    "stage": 4,
+    "updates": 7630,
+    "conflict_fraction": 0.464875,
+    "cos_mean": 0.007226,
+    "cos_median": 0.006846,
+    "cos_min": -0.606095,
+    "cos_max": 0.556166,
+    "proj_ratio_mean_all": 0.042308,
+    "proj_ratio_mean_conflict": 0.091009
+  }
+]

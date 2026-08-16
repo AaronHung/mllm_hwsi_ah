@@ -3,9 +3,9 @@
 > 這份文件回答三個問題：做了什麼、為什麼做、結果如何（成功/失敗/其他），以及這些跟論文的關係。
 > 接續 `docs/research_timeline_20260816.md`。
 >
-> **寫作時點很重要**：本文件寫於 2026-08-16 深夜（CST），v0.34 development gate **正在跑、尚未出
-> verdict**。因此下面「結果」欄位有一大塊是空的——這是刻意的，不是漏寫。verdict 出來後會在同一份
-> 文件補上，並標明補寫時間。日期慣例：文件日期用本機 CST 日曆日，run tag 用 UTC timestamp。
+> **寫作時點**：本文件主體寫於 2026-08-16 深夜（CST），當時 v0.34 development gate 正在跑、
+> 尚未出 verdict；「結果」一節於 **2026-08-17 05:10 CST** 跑批結束後補寫，該節標題有註明。
+> 日期慣例：文件日期用本機 CST 日曆日，run tag 用 UTC timestamp。
 
 ## 論文在問什麼問題（一句話版本）
 
@@ -20,7 +20,7 @@
 Fable 接手把 `paper/main.tex` 改成 framework-first 脊椎（Fig.1 領頭 → 方法 → 評估 → 發現 → 附錄），
 這件事在 v0.34 成功或失敗兩個世界裡內容完全相同，所以與 Track B 並行、零日曆浪費。
 
-**Track B（v0.34 新方法 track）：** v0.33 正式封存，**v0.34 已開案並開跑**。
+**Track B（v0.34 新方法 track）：** v0.33 正式封存，v0.34 已開案、跑完 development gate，**三個 config 全部 DEV FAIL**，方法算力工作到此結束（不開 v0.35）。
 
 | 項目 | 8/16 傍晚 | 8/17 凌晨（本次） |
 |---|---|---|
@@ -29,7 +29,8 @@ Fable 接手把 `paper/main.tex` 改成 framework-first 脊椎（Fig.1 領頭 �
 | v0.34 預註冊 | 不存在 | `docs/method_gate_v034.md` 已 commit（訓練前） |
 | v0.34 實作 | 不存在 | gradient arbiter + violation weight + conflict 儀器，已 commit |
 | Bit-exact 回歸 | — | **PASS，20/20 逐位相同** |
-| Development gate | — | **36 units 跑批中**（27 dev + 9 儀器化） |
+| Development gate | — | **36/36 跑完（5h03m），三個 config 全部 DEV FAIL** |
+| 機制假說 | 未量測 | **儀器直接量測，不支持 gradient-conflict 解釋** |
 | 下一個阻塞點 | 三方對 Gate v2 的 joint unblinding review（已完成） | **三方對 v0.34 dev verdict 的 focused review** |
 
 ## 為什麼會有 v0.34（決策鏈，別跳過）
@@ -69,7 +70,7 @@ framework-first 重排寫法」→ **Sol 只同意一半**，指出老師仍會�
 space 裡「移除一階反向分量」；plasticity 一律維持 empirical gate。Novelty 是三件組本體，
 **gradient projection 是手段不是宣稱**，不寫 "reverse A-GEM"、不寫發明 gradient projection。
 
-## 今晚做了什麼（8/16 深夜）
+## 今晚做了什麼（8/16 深夜 – 8/17 清晨）
 
 ### 階段 9 — v0.34 開案 + 實作 + 開跑
 
@@ -87,7 +88,7 @@ space 裡「移除一階反向分量」；plasticity 一律維持 empirical gate
   5. 36 units 開跑（Mac MPS、tmux + `caffeinate`、atomic resume）。
 - **為什麼**：判準在看到任何數字之前寫死並 commit，這樣不管結果好壞都站得住腳。bit-exact 回歸是
   「證明」而不是「宣稱」凍結路徑沒被動到——這次加 arbiter 動到了梯度組裝，不驗證就開跑是不負責任的。
-- **結果**：見下一節（**尚未出爐**）。
+- **結果**：36/36 units 乾淨跑完（5h03m，exit 0），verdict 已自動產生並 STOP。見「結果」一節。
 
 ### PI 在開工前加的兩件事
 
@@ -118,23 +119,80 @@ space 裡「移除一階反向分量」；plasticity 一律維持 empirical gate
 候選；兩個候選都過就取 A 軸較強者；若 `proj_distill` 也過 A，**必須明白揭露**——那是對 novelty 定位的
 直接反證。
 
-## 結果（待補）
+## 結果（2026-08-17 05:10 CST 補寫；跑批 36/36 乾淨完成，耗時 5h03m）
 
-> **verdict 尚未產生。** 跑批完成後由 `scripts/method_gate_v034_verdict.py` 自動計算，寫進
-> `results/method_gate_v034_dev_verdict.md`，然後**立刻 STOP**。這一段會在那時補寫，並標明補寫時間。
+**三個 config 全部 DEV FAIL。** 完整逐格數字見 `results/method_gate_v034_dev_verdict.md`。
+但這次的 FAIL 結構比 Gate v2 那次資訊量大很多，下面三點是給三方 review 的重點。
+
+### 1. `proj_eq_pres` **確實把兩個被診斷的格子修好了**，而且 utility 優勢保住
+
+| 格子 | `eq_pres`（凍結，v2） | `proj_eq_pres`（v0.34） |
+|---|---|---|
+| `brca` K=2 ΔA[t,t] | −0.0175（3-seed）／−0.0341（pooled5） | **+0.0088** |
+| `lung` K=4 ΔA[t,t] | −0.0079（3-seed）／−0.0129（pooled5） | **+0.0177** |
+| K=1 ΔForgetting vs `ours_uniform`／`distill` | 未達 parity | **−0.0079／−0.0133，PASS** |
+| Δε-mass K=1 vs `ours_uniform`／`distill` | +0.0308／+0.0405 | **+0.0411／+0.0509（3/3 seeds）** |
+| Δε-mass K=2 | — | **+0.0293／+0.0335（3/3 seeds）** |
+
+也就是說 **criterion A PASS、criterion B-c（診斷靶）PASS**。介入本身在它瞄準的目標上是有效的。
+
+### 2. 殺死它的是 Sol 加的那條 no-new-failure
+
+`proj_eq_pres` 在**沒被診斷過**的 `brca` K=4 新開了一個洞：ΔA[t,t] = **−0.0331**
+[+0.0000, −0.0729, −0.0263]——這格對 `eq_pres` 本來是好的（v2 pooled5 = +0.0012）。
+另外 B-b 在 K=2／K=4 對 `distill` 沒過（+0.0159／+0.0057），C 的 replay safety 在 K=2 沒過（+0.0082）。
+
+**這正是 Sol amendment item 1 存在的理由。** 如果照 Fable 原本的 S2-B（只要求修好已知的兩格 +
+K=1 遺忘），`proj_eq_pres` 會**通過** development gate 並直接進 confirmation——然後我們會拿一個
+「修好兩格、弄壞另一格」的方法去跑 reverse order。這條 amendment 直接擋下了一次假陽性。
+
+### 3. 機制假說**沒有得到儀器支持**（這點最重要，也最需要三方裁定）
+
+`eq_pres_diag`（凍結 `eq_pres` 的純儀器化複製，90/90 逐位相同、已 ADMITTED）量到的
+conflict fraction：
+
+| 格子 | conflict fraction | mean cos |
+|---|---|---|
+| `brca` K=2（診斷靶，失敗格） | 0.4913 | +0.0006 |
+| `lung` K=4（診斷靶，失敗格） | 0.4988 | −0.0006 |
+| `rcc` K=1（健康格） | **0.5039** | +0.0005 |
+| `brca` K=1（健康格） | 0.4768 | +0.0053 |
+| `lung` K=1（健康格） | 0.4580 | +0.0115 |
+
+全部 config、全部 stage、全部預算的 conflict fraction 都落在 **0.458–0.504**，mean cosine 全部 ≈ 0。
+**被診斷的失敗格跟健康格分不出來**——`rcc` K=1 這個完全沒問題的格子，conflict fraction 比兩個
+失敗格都還高。這是兩個高維梯度之間「沒有系統性關係」時該有的樣子（符號各半、平均餘弦為零），
+不是「preservation gradient 在特定階段有系統地對抗 new-task acquisition」該有的樣子。
+
+依 rider r2，這條連結從一開始就登記為**事後陳述的假說、不設數值門檻、不中途停跑**，所以這裡只陳述
+事實：**儀器沒有支持「gradient conflict 造成 Gate-v2 那兩格 plasticity 損失」這個解釋。**
+要不要據此改寫論文裡的機制敘事，是三方 review 的裁定，不是這份文件的裁定。
+
+值得一併記下的是：投影**確實有在作用**（約半數 update 觸發，`|proj|/|g_m|` 約 0.03–0.15），而且
+確實把兩個靶格修好了。所以現在的狀況是「介入有效，但我們對它為什麼有效的解釋沒被證實」。
+
+### 4. 附帶結論：utility 優勢來自 equivalence objective，不是來自 arbiter
+
+generic control `proj_distill`（= `ours_uniform` + 同一個 arbiter）**criterion A 沒過**
+（K=2 Δε-mass vs `ours_uniform` = −0.0028）。§3.4 item 5 的揭露條款因此**未觸發**——
+如果它過了，那會是對 novelty 定位的直接反證。目前的資料指向相反方向：把 arbiter 加在 generic
+distillation 上拿不到 utility 優勢，那個優勢是 `L_eq` 帶來的。
 
 ## 接下來的 scope
 
-1. **(阻塞點)** dev verdict 出來後，交 Aaron / Sol / Fable 做 focused three-way review。
-   review 只審兩件事：機制儀器支不支持我們對 v2 失敗的解釋、以及判準有沒有被忠實套用。
-   **review 前不跑 confirmation、不做 promotion、不改任何論文宣稱。**
-2. **若 dev PASS**：confirmation = winner config、**reverse order**、**明確 seeds {0,1,2,3,4}**、
-   K∈{1,2,4}、Mac MPS，措辭一律用 "previously unseen v0.34 reverse-order confirmation runs"
-   （**禁用** "fresh seeds"——那會害人跑去 seeds 5–9，直接失去與凍結 reverse comparator 的配對）。
-   通過後 pilot40 加一列（RunPod CUDA）。Deadline 8/21。
-3. **若 dev FAIL 或中止**：誠實封存。論文走 framework-first，`eq_pres` 當 diagnostic precursor，
+1. **(阻塞點，現在就在這裡)** dev verdict 已產生，交 Aaron / Sol / Fable 做 focused three-way
+   review。**dev FAIL，所以 confirmation 分支不啟動。** review 要裁定的其實只剩兩件事：
+   - 機制敘事怎麼改寫。儀器直接量到的結果不支持 gradient-conflict 解釋（見上方結果第 3 點），
+     但介入確實修好了兩個靶格。論文要怎麼誠實描述「有效但機制未證實」，需要三方定調。
+   - `proj_eq_pres` 的 A + B-c 通過、B-a 新開一洞這個結構，在附錄裡要寫成什麼樣子。
+   **review 前不做 promotion、不改任何論文宣稱。**
+2. **confirmation 分支不啟動**（僅存檔備查）：原本規劃是 winner config、reverse order、
+   **明確 seeds {0,1,2,3,4}**、K∈{1,2,4}、Mac MPS，措辭一律用 "previously unseen v0.34
+   reverse-order confirmation runs"（**禁用** "fresh seeds"——那會害人跑去 seeds 5–9，直接失去
+   與凍結 reverse comparator 的配對）。
+3. **執行 dev FAIL 分支**：誠實封存。論文走 framework-first，`eq_pres` 當 diagnostic precursor，
    三個 v0.34 config 連同 per-seed 表寫進附錄標記 tested-negative（跟 `ia_samp`/`ia_ep` 一樣）。
-   **不開 v0.35。**
+   **不開 v0.35。** 所有方法算力工作到此結束，日曆上比 8/22 science freeze 提前五天。
 4. Track A 並行寫作：`paper/main.tex` framework-first 重排、`\xx{}` 佔位數字換成最終數字、
    跑 `scripts/check_forbidden_phrases.py`。
 5. Protocol 既定關卡：Gate 2'（8/22）、Gate 3'（8/24）。
