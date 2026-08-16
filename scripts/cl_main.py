@@ -43,7 +43,8 @@ sys.path.insert(0, str(REPO))
 from nav import (add_device_argument, device_info,  # noqa: E402
                  resolve_device, run_provenance)
 from nav.candata import COHORTS, CanTask  # noqa: E402
-from nav.cl import (METHOD_GATE_KWARGS, METHOD_KWARGS,  # noqa: E402
+from nav.cl import (ARBITER_CONFIGS, METHOD_GATE_KWARGS,  # noqa: E402
+                    METHOD_KWARGS,
                     attach_boundary_policy, build_buffer,
                     chunkwise_percentile_rank, epsilon_optimal_mask,
                     eval_policy_balanced, fisher_of, flatten_task_labels,
@@ -108,6 +109,49 @@ def load_pilot_tasks(seed: int, smoke: bool) -> list[TaskSpec]:
     return tasks
 
 
+# --------------------------------------------------- v0.34 arbiter logging
+def write_arbiter_log(arbiter_dir: Path, method: str, seed: int, k: int,
+                      stage: int, records: list[dict]) -> dict[str, object]:
+    """Persist one stage's per-update conflict diagnostics.
+
+    Two artifacts, following the mechanism-probe convention already used in
+    this repo: the raw per-update stream as `.jsonl` (excluded from version
+    control by `runs/v2/**/*.jsonl`), and a committed per-stage summary.
+    docs/method_gate_v034.md §2.4.
+    """
+    arbiter_dir.mkdir(parents=True, exist_ok=True)
+    stem = f"{method}_seed{seed}_K{k}"
+    with (arbiter_dir / f"{stem}.jsonl").open("a") as fh:
+        for rec in records:
+            fh.write(json.dumps({"stage": stage, **rec}) + "\n")
+
+    n = len(records)
+    cos = [r["cos"] for r in records]
+    conflict = [r["conflict"] for r in records]
+    proj = [r["proj_ratio"] for r in records]
+    summary = {
+        "method": method, "seed": seed, "K": k, "stage": stage,
+        "updates": n,
+        "conflict_fraction": round(sum(conflict) / n, 6) if n else None,
+        "cos_mean": round(float(np.mean(cos)), 6) if n else None,
+        "cos_median": round(float(np.median(cos)), 6) if n else None,
+        "cos_min": round(float(np.min(cos)), 6) if n else None,
+        "cos_max": round(float(np.max(cos)), 6) if n else None,
+        # Mean over all updates (0 on non-conflicting ones) and over the
+        # conflicting subset — the second is "how hard the arbiter pulls when
+        # it does act", which the first alone cannot show.
+        "proj_ratio_mean_all": round(float(np.mean(proj)), 6) if n else None,
+        "proj_ratio_mean_conflict": (
+            round(float(np.mean([p for p, c in zip(proj, conflict) if c])), 6)
+            if any(conflict) else 0.0),
+    }
+    path = arbiter_dir / f"arbiter_summary_{stem}.json"
+    existing = json.loads(path.read_text()) if path.exists() else []
+    existing.append(summary)
+    path.write_text(json.dumps(existing, indent=2))
+    return summary
+
+
 # ------------------------------------------------------------------ sequence
 def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                  device, ev_epochs: int, nav_epochs: int,
@@ -116,7 +160,8 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                  eval_split: str = "test",
                  run_meta: dict[str, object] | None = None,
                  diag_log: list[dict] | None = None,
-                 ckpt_dir: Path | None = None) -> list[dict]:
+                 ckpt_dir: Path | None = None,
+                 arbiter_dir: Path | None = None) -> list[dict]:
     torch.manual_seed(seed)
     t_start = time.time()
 
@@ -170,12 +215,20 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                 gate_extra["task_labels"] = flatten_task_labels(
                     buffer_by_task,
                     [tasks[i].name for i in range(len(buffer_by_task))])
+            if arbiter_dir is not None and method in ARBITER_CONFIGS:
+                # v0.34 §2.4: one log per stage, so the per-stage conflict
+                # fraction is a property of the stage, not of a flat run-long
+                # list that would need re-segmenting afterwards.
+                gate_extra["arbiter_log"] = []
             nav = train_navigator_cl(
                 steps, device, navigator=nav, epochs=nav_epochs, seed=seed,
                 old_nav=old_nav, buffer=buffer, lam=lam,
                 ewc_terms=ewc_terms if method == "ewc" else None,
                 lam_ewc=lam_ewc, diag_log=diag_log, **gate_extra,
                 **method_kwargs)
+            if "arbiter_log" in gate_extra:
+                write_arbiter_log(arbiter_dir, method, seed, k, t + 1,
+                                  gate_extra["arbiter_log"])
 
         # ---- 任務結束的 bookkeeping ----
         if method == "ewc":

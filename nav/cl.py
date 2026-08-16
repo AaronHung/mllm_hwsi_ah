@@ -26,6 +26,23 @@ chunk 內算 percentile rank（見 chunkwise_percentile_rank），而非整個 b
 一起排名——各 task 的 raw counterfactual gain 出自各自獨立的 frozen
 evaluator（class 數、base entropy 不同），全域排名會把 evaluator-scale
 差異誤讀成 state importance。跨 task 的 replay 壓力完全交給 d_t(s)。
+
+v0.34 method track (docs/method_gate_v034.md), all opt-in and defaulting to
+the pre-v0.34 behavior:
+    - use_arbiter     : per-update gradient arbitration between the
+                        current-task gradient g_n and the memory-side
+                        gradient g_m (§2.2). Projects the whole g_m, so the
+                        arbiter is identical across projected configs.
+    - violation_weight: weights L_eq by the stop-gradient equivalence
+                        violation sg[v(s)] = sg[1 - mass] (§2.1), i.e.
+                        preserve only where access is actually being lost.
+    - conflict_diag   : instrumentation-only mode. Records the same
+                        conflict statistics WITHOUT touching the update
+                        path, so a frozen config replays bit-identically
+                        (§2.5). Never combine with use_arbiter.
+The frozen `loss = loss + ...` accumulation order below is deliberately left
+untouched by all three (§2.6): a different summation order would break
+bit-exactness against the frozen Protocol-v1 / v0.33 rows.
 """
 
 from __future__ import annotations
@@ -333,6 +350,80 @@ class ImportanceReplaySampler:
         return int(rng.choice(len(self.buffer), p=self.p))
 
 
+# ----------------------------------------------- v0.34 gradient arbiter
+def flat_grad(loss: torch.Tensor, params: list[torch.nn.Parameter],
+              retain_graph: bool) -> torch.Tensor:
+    """Flatten d(loss)/d(params) into one vector, in `params` order.
+
+    Uses torch.autograd.grad rather than .backward() so nothing is written
+    into p.grad — that matters for conflict_diag mode (docs/
+    method_gate_v034.md §2.5), where the real update must stay byte-identical
+    to the frozen path. Unused parameters materialize as zeros so the vector
+    layout is stable across updates.
+    """
+    grads = torch.autograd.grad(loss, params, retain_graph=retain_graph,
+                                allow_unused=True)
+    return torch.cat([(g if g is not None else torch.zeros_like(p)).reshape(-1)
+                      for g, p in zip(grads, params)])
+
+
+def conflict_scalars(g_n: torch.Tensor, g_m: torch.Tensor
+                     ) -> tuple[float, float, float]:
+    """(g_n.g_m, |g_n|^2, |g_m|^2) in a SINGLE device sync.
+
+    Every scalar the arbiter and the §2.4 log need comes from here. Reading
+    them one at a time would cost four MPS->CPU syncs per update, which at
+    ~10^4 updates per stage is pure wall-clock for no information.
+    """
+    packed = torch.stack([torch.dot(g_n, g_m), torch.dot(g_n, g_n),
+                          torch.dot(g_m, g_m)])
+    dot, nn2, mm2 = packed.tolist()
+    return dot, nn2, mm2
+
+
+def conflict_stats(dot: float, nn2: float, mm2: float,
+                   step: int) -> dict[str, float]:
+    """The four quantities §2.4 requires, for one update.
+
+    `proj_ratio` is the magnitude of the component that the arbiter actually
+    removes, relative to |g_m| — hence 0.0 whenever the update is not in
+    conflict, and |cos| when it is. In conflict_diag mode nothing is removed,
+    so the same number is the counterfactual "would-be" projection ratio.
+    """
+    cos = dot / ((nn2 ** 0.5) * (mm2 ** 0.5) + 1e-12)
+    conflict = dot < 0.0
+    return {"step": step,
+            "cos": round(cos, 6),
+            "conflict": int(conflict),
+            "proj_ratio": round(abs(cos) if conflict else 0.0, 6),
+            "gn_norm": round(nn2 ** 0.5, 6),
+            "gm_norm": round(mm2 ** 0.5, 6)}
+
+
+def arbiter_grad(g_n: torch.Tensor, g_m: torch.Tensor, dot: float,
+                 nn2: float, lambda_arb: float) -> torch.Tensor:
+    """§2.2: drop the component of g_m that is first-order anti-aligned with
+    g_n, then combine. Guarantees g_n . g_m_proj == 0 in RAW gradient space
+    when the two conflict — it does NOT guarantee anything about the realized
+    Adam update (docs/method_gate_v034.md §2.2, rider r4).
+
+    `dot` and `nn2` come from conflict_scalars(), so the coefficient is a
+    plain float and the projection costs no additional sync."""
+    if dot < 0.0:
+        g_m = g_m - (dot / (nn2 + 1e-12)) * g_n
+    return g_n + lambda_arb * g_m
+
+
+def assign_flat_grad(params: list[torch.nn.Parameter],
+                     flat: torch.Tensor) -> None:
+    """Write a flat gradient vector back into p.grad, in `params` order."""
+    off = 0
+    for p in params:
+        n = p.numel()
+        p.grad = flat[off:off + n].view_as(p).clone()
+        off += n
+
+
 # ------------------------------------------------------------------ trainer
 def train_navigator_cl(steps: list[TeacherStep], device,
                        navigator: Navigator | None = None,
@@ -354,12 +445,23 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                        drift_refresh_every: int = 50,
                        use_eq_pres: bool = False,
                        eps: float = 0.05,
+                       use_arbiter: bool = False,
+                       violation_weight: bool = False,
+                       conflict_diag: bool = False,
+                       lambda_arb: float = 1.0,
+                       arbiter_log: list[dict] | None = None,
                        diag_log: list[dict] | None = None,
                        u_state_override: np.ndarray | None = None,
                        task_labels: np.ndarray | None = None) -> Navigator:
     """v0.33.1 adds `replay_sampling="importance"` (M1) and `use_eq_pres` (M2)
     behind opt-in kwargs; every Protocol-v1 method keeps its old code path
     (`replay_sampling="uniform"`, `use_eq_pres=False` are the defaults).
+
+    v0.34 (docs/method_gate_v034.md) adds `use_arbiter` / `violation_weight`
+    / `conflict_diag`, all default-off for the same reason. `conflict_diag`
+    is instrumentation only: it computes the diagnostic gradients on the SAME
+    forward graph and leaves opt.zero_grad()/backward()/step() untouched, so a
+    frozen config replays bit-identically (§2.5 validity condition).
 
     v0.33.2: `u_state_override` should be the caller-precomputed, chunk-wise
     percentile rank (`chunkwise_percentile_rank`) aligned to `buffer`'s
@@ -371,6 +473,11 @@ def train_navigator_cl(steps: list[TeacherStep], device,
     """
     if replay_sampling not in ("uniform", "importance"):
         raise ValueError(f"unknown replay_sampling: {replay_sampling!r}")
+    if use_arbiter and conflict_diag:
+        # conflict_diag exists to leave the update path alone; combining the
+        # two would silently make a "bit-identical replication" run apply a
+        # projected gradient (docs/method_gate_v034.md §2.5 condition 2).
+        raise ValueError("use_arbiter and conflict_diag are mutually exclusive")
     rng = np.random.default_rng(seed)
     if navigator is None:
         navigator = Navigator(low_dim=steps[0].low.shape[1],
@@ -403,6 +510,13 @@ def train_navigator_cl(steps: list[TeacherStep], device,
             task_labels=task_labels)
         sampler.refresh(nav, 0)
 
+    # v0.34 §2.2: the arbiter needs the current-task and memory-side terms
+    # separately, but the `loss = loss + ...` chain below must keep its exact
+    # summation order (§2.6), so the split is done by holding extra
+    # references, never by regrouping the sum.
+    split_terms = use_arbiter or conflict_diag
+    params = [p for p in nav.parameters() if p.requires_grad]
+
     global_step = 0
     for _ in range(epochs):
         order = rng.permutation(len(steps))
@@ -420,6 +534,9 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                 loss = loss + lam * F.kl_div(F.log_softmax(scores, dim=0),
                                              old_p, reduction="sum")
 
+            loss_new = loss if split_terms else None
+            mem_terms: list[torch.Tensor] = []
+
             if buffer and (use_replay or use_distill):
                 j = sampler.sample(rng) if sampler is not None \
                     else int(rng.integers(len(buffer)))
@@ -430,7 +547,10 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                 r_logp = F.log_softmax(r_scores, dim=0)
                 if use_replay:
                     r_target = F.softmax(rst.gain.to(device) / tau, dim=0)
-                    loss = loss + F.kl_div(r_logp, r_target, reduction="sum")
+                    r_term = F.kl_div(r_logp, r_target, reduction="sum")
+                    loss = loss + r_term
+                    if split_terms:
+                        mem_terms.append(r_term)
                 if use_distill and old_nav is not None:
                     if use_eq_pres:
                         # M2: replace the old-policy KL term with the
@@ -438,12 +558,25 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                         mask = eps_masks[j]
                         pi_theta = F.softmax(r_scores, dim=0)
                         mass = pi_theta[mask].sum().clamp(1e-8, 1.0)
-                        loss = loss + lam * u_w[j].to(device) * (-mass.log())
+                        if violation_weight:
+                            # v0.34 §2.1: preserve only where the policy has
+                            # actually started to lose access to A_eps(s).
+                            # sg[] keeps v(s) a constant weight, so no
+                            # second-order term enters the gradient.
+                            v_s = (1.0 - mass).detach()
+                            m_term = lam * u_w[j].to(device) * v_s \
+                                * (-mass.log())
+                        else:
+                            m_term = lam * u_w[j].to(device) * (-mass.log())
+                        loss = loss + m_term
                     else:
                         with torch.no_grad():
                             old_p = F.softmax(old_nav(rlow, rctx), dim=0)
-                        loss = loss + lam * u_w[j].to(device) * F.kl_div(
+                        m_term = lam * u_w[j].to(device) * F.kl_div(
                             r_logp, old_p, reduction="sum")
+                        loss = loss + m_term
+                    if split_terms:
+                        mem_terms.append(m_term)
 
             if ewc_terms:
                 pen = torch.zeros((), device=device)
@@ -453,9 +586,33 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                                      * (p - term.anchor[n].to(device)) ** 2).sum()
                 loss = loss + lam_ewc * pen
 
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
+            # v0.34 §2.2/§2.5. `mem_terms` is empty on the first task (no
+            # buffer, no old_nav), where both new modes degrade to the frozen
+            # single-backward update by construction.
+            if split_terms and mem_terms:
+                loss_mem = mem_terms[0]
+                for extra in mem_terms[1:]:
+                    loss_mem = loss_mem + extra
+                g_n = flat_grad(loss_new, params, retain_graph=True)
+                g_m = flat_grad(loss_mem, params, retain_graph=conflict_diag)
+                dot, nn2, mm2 = conflict_scalars(g_n, g_m)
+                if arbiter_log is not None:
+                    arbiter_log.append(
+                        conflict_stats(dot, nn2, mm2, global_step))
+                if use_arbiter:
+                    opt.zero_grad()
+                    assign_flat_grad(
+                        params, arbiter_grad(g_n, g_m, dot, nn2, lambda_arb))
+                    opt.step()
+                else:
+                    # conflict_diag: the frozen update path, untouched.
+                    opt.zero_grad()
+                    loss.backward()
+                    opt.step()
+            else:
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
 
             global_step += 1
             if sampler is not None:
@@ -492,4 +649,30 @@ METHOD_GATE_KWARGS = {
     "samp_drift_only": dict(use_replay=True, use_distill=True,
                             utility_weight=False, replay_sampling="importance",
                             sampling_alpha=0.0),
+    # v0.34 method track (docs/method_gate_v034.md §2.3).  Same ours_uniform
+    # base as above, so the only isolated variables are the memory objective
+    # and the arbiter.  NOTE: `proj_distill` keeps the name used in the
+    # sign-off text, but its L_mem is L_replay + old-policy KL — the
+    # ours_uniform composition plus the arbiter, NOT the frozen `distill`
+    # method (which has no replay term).  Fixed set of three, no fourth.
+    "proj_distill": dict(use_replay=True, use_distill=True,
+                         utility_weight=False, use_arbiter=True),
+    "proj_eq_pres": dict(use_replay=True, use_distill=True,
+                         utility_weight=False, use_eq_pres=True,
+                         use_arbiter=True),
+    "conflict_eq_pres": dict(use_replay=True, use_distill=True,
+                             utility_weight=False, use_eq_pres=True,
+                             use_arbiter=True, violation_weight=True),
+    # Instrumentation-only replication of frozen `eq_pres` (§2.5): identical
+    # update path, conflict statistics recorded on the same forward graph.
+    # Its metric rows are never admitted anywhere — the separate key exists
+    # so they cannot be pooled with real `eq_pres` rows by accident.
+    "eq_pres_diag": dict(use_replay=True, use_distill=True,
+                         utility_weight=False, use_eq_pres=True,
+                         conflict_diag=True),
 }
+
+# Configs whose per-update gradient-conflict instrumentation must exist
+# (docs/method_gate_v034.md §2.4); read by scripts/cl_main.py and the runner.
+ARBITER_CONFIGS = ("proj_distill", "proj_eq_pres", "conflict_eq_pres",
+                   "eq_pres_diag")
