@@ -450,6 +450,10 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                        conflict_diag: bool = False,
                        lambda_arb: float = 1.0,
                        arbiter_log: list[dict] | None = None,
+                       film_tasks: int | None = None,
+                       task_idx: int | None = None,
+                       lr_core_mult: float = 0.1,
+                       buffer_task_ids: np.ndarray | None = None,
                        diag_log: list[dict] | None = None,
                        u_state_override: np.ndarray | None = None,
                        task_labels: np.ndarray | None = None) -> Navigator:
@@ -490,9 +494,29 @@ def train_navigator_cl(steps: list[TeacherStep], device,
     rng = np.random.default_rng(seed)
     if navigator is None:
         navigator = Navigator(low_dim=steps[0].low.shape[1],
-                              high_dim=steps[0].context.shape[0] - 1).to(device)
+                              high_dim=steps[0].context.shape[0] - 1,
+                              film_tasks=film_tasks).to(device)
     nav = navigator
-    opt = torch.optim.Adam(nav.parameters(), lr=lr, weight_decay=1e-4)
+    if getattr(nav, "film_tasks", None) is None:
+        opt = torch.optim.Adam(nav.parameters(), lr=lr, weight_decay=1e-4)
+    else:
+        # Track C0 §2.3/§6.3/§6.5: adapter t at the full lr, shared core at
+        # lr_core_mult * lr, earlier/later adapters not updated at all.  No
+        # weight decay on FiLM scale/shift — L2 on a scale initialized at 1
+        # pulls it away from the identity the design depends on.
+        if task_idx is None:
+            raise ValueError("film_tasks set but task_idx is None; C0 needs "
+                             "the oracle task index (docs/track_c0.md §1)")
+        for p in nav.film_parameters():
+            p.requires_grad_(False)
+        for p in nav.film_parameters(task_idx):
+            p.requires_grad_(True)
+        opt = torch.optim.Adam(
+            [{"params": nav.core_parameters(), "lr": lr * lr_core_mult,
+              "weight_decay": 1e-4},
+             {"params": nav.film_parameters(task_idx), "lr": lr,
+              "weight_decay": 0.0}], lr=lr)
+        nav.active_task = task_idx
     nav.train()
     if old_nav is not None:
         old_nav.eval()
@@ -552,6 +576,14 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                 rst = buffer[j]
                 rlow = rst.low[rst.candidates].to(device)
                 rctx = rst.context.to(device)
+                if film_tasks is not None and buffer_task_ids is not None:
+                    # Track C0 §6.2: a replayed state from task j is scored
+                    # through task j's own (now frozen) adapter — scoring it
+                    # through the current task's modulation would evaluate old
+                    # evidence under a setting that task never had.
+                    nav.active_task = int(buffer_task_ids[j])
+                    if old_nav is not None:
+                        old_nav.active_task = int(buffer_task_ids[j])
                 r_scores = nav(rlow, rctx)
                 r_logp = F.log_softmax(r_scores, dim=0)
                 if use_replay:
@@ -586,6 +618,10 @@ def train_navigator_cl(steps: list[TeacherStep], device,
                         loss = loss + m_term
                     if split_terms:
                         mem_terms.append(m_term)
+                if film_tasks is not None and buffer_task_ids is not None:
+                    nav.active_task = task_idx          # back to current task
+                    if old_nav is not None:
+                        old_nav.active_task = task_idx
 
             if ewc_terms:
                 pen = torch.zeros((), device=device)
@@ -685,3 +721,14 @@ METHOD_GATE_KWARGS = {
 # (docs/method_gate_v034.md §2.4); read by scripts/cl_main.py and the runner.
 ARBITER_CONFIGS = ("proj_distill", "proj_eq_pres", "conflict_eq_pres",
                    "eq_pres_diag")
+
+# Track C0 (docs/track_c0.md §3).  Architecture-level track: a slowly updated
+# shared core plus per-task FiLM adapters, under oracle task identity (§1).
+# `sp_nav_eq` adds L_eq consolidation on replayed states and NOTHING else —
+# no replay imitation term, per the literal reading recorded in §6.1.
+TRACK_C0_KWARGS = {
+    "sp_nav": dict(film_tasks=4),
+    "sp_nav_eq": dict(film_tasks=4, use_distill=True, use_eq_pres=True,
+                      utility_weight=False),
+}
+C0_CONFIGS = tuple(TRACK_C0_KWARGS)

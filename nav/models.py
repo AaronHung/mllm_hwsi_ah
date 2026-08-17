@@ -35,14 +35,57 @@ class Navigator(nn.Module):
     """
 
     def __init__(self, hidden: int = 256, low_dim: int = REGION_DIM,
-                 high_dim: int = PATCH_DIM):
+                 high_dim: int = PATCH_DIM, film_tasks: int | None = None):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(low_dim + high_dim + 1, hidden), nn.ReLU(),
             nn.Linear(hidden, hidden // 4), nn.ReLU(),
             nn.Linear(hidden // 4, 1))
+        # Track C0 (docs/track_c0.md §2.2): per-task diagonal FiLM adapters,
+        # off by default.  Built AFTER self.net on purpose — the core's
+        # initialization must consume the RNG stream in exactly the pre-C0
+        # order, and ones/zeros draw no random numbers at all, so a C0
+        # navigator's core starts from the same weights a pre-C0 one would.
+        self.film_tasks = film_tasks
+        self.active_task: int | None = None
+        if film_tasks is not None:
+            for name, dim, fill in (("film_gamma1", hidden, 1.0),
+                                    ("film_beta1", hidden, 0.0),
+                                    ("film_gamma2", hidden // 4, 1.0),
+                                    ("film_beta2", hidden // 4, 0.0)):
+                setattr(self, name, nn.ParameterList(
+                    [nn.Parameter(torch.full((dim,), fill))
+                     for _ in range(film_tasks)]))
+
+    def film_parameters(self, task: int | None = None) -> list[nn.Parameter]:
+        """FiLM parameters, all tasks or one task. Empty when the flag is off."""
+        if self.film_tasks is None:
+            return []
+        tasks = range(self.film_tasks) if task is None else [task]
+        return [getattr(self, name)[t] for t in tasks
+                for name in ("film_gamma1", "film_beta1",
+                             "film_gamma2", "film_beta2")]
+
+    def core_parameters(self) -> list[nn.Parameter]:
+        """The shared core, i.e. everything that is not a FiLM adapter."""
+        return list(self.net.parameters())
 
     def forward(self, region_low: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
         """region_low: [R,192]；context: [512+1]（同一 state 下所有候選共用）。"""
         ctx = context.expand(region_low.shape[0], -1)
-        return self.net(torch.cat([region_low, ctx], dim=1)).squeeze(-1)
+        x = torch.cat([region_low, ctx], dim=1)
+        if self.film_tasks is None:
+            return self.net(x).squeeze(-1)
+        # Oracle task identity (docs/track_c0.md §1/§2.4): the caller states
+        # which task's adapter is active; there is no inference of it here,
+        # and forgetting to set it is an error rather than a silent default.
+        t = self.active_task
+        if t is None:
+            raise RuntimeError(
+                "FiLM navigator called without active_task; C0 assumes oracle "
+                "task identity (docs/track_c0.md §1)")
+        h = self.net[1](self.net[0](x))
+        h = self.film_gamma1[t] * h + self.film_beta1[t]
+        h = self.net[3](self.net[2](h))
+        h = self.film_gamma2[t] * h + self.film_beta2[t]
+        return self.net[4](h).squeeze(-1)

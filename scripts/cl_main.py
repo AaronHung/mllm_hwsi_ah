@@ -43,8 +43,8 @@ sys.path.insert(0, str(REPO))
 from nav import (add_device_argument, device_info,  # noqa: E402
                  resolve_device, run_provenance)
 from nav.candata import COHORTS, CanTask  # noqa: E402
-from nav.cl import (ARBITER_CONFIGS, METHOD_GATE_KWARGS,  # noqa: E402
-                    METHOD_KWARGS,
+from nav.cl import (ARBITER_CONFIGS, C0_CONFIGS,  # noqa: E402
+                    METHOD_GATE_KWARGS, METHOD_KWARGS, TRACK_C0_KWARGS,
                     attach_boundary_policy, build_buffer,
                     chunkwise_percentile_rank, epsilon_optimal_mask,
                     eval_policy_balanced, fisher_of, flatten_task_labels,
@@ -186,8 +186,10 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
     # v0.33.1 method-gate configs (docs/method_gate_v033.md) live in
     # METHOD_GATE_KWARGS, never in the frozen METHOD_KWARGS table.
     method_kwargs = dict(METHOD_KWARGS.get(method)
-                         or METHOD_GATE_KWARGS.get(method, {}))
+                         or METHOD_GATE_KWARGS.get(method)
+                         or TRACK_C0_KWARGS.get(method, {}))
     needs_boundary_policy = method_kwargs.get("replay_sampling") == "importance"
+    is_c0 = method in C0_CONFIGS
 
     nav = None
     old_nav = None
@@ -217,8 +219,13 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
             nav = train_navigator_cl(all_steps, device, navigator=None,
                                      epochs=nav_epochs, seed=seed)
         elif t == 0:
+            # Stage 1 is plain imitation for every method; C0 additionally
+            # needs the adapter bank created and task 0 selected as it trains
+            # (docs/track_c0.md §2.3).
+            c0_first = ({"film_tasks": method_kwargs["film_tasks"],
+                         "task_idx": 0} if is_c0 else {})
             nav = train_navigator_cl(steps, device, navigator=nav,
-                                     epochs=nav_epochs, seed=seed)
+                                     epochs=nav_epochs, seed=seed, **c0_first)
         else:
             buffer = [st for bb in buffer_by_task for st in bb]
             gate_extra: dict[str, object] = {}
@@ -233,6 +240,14 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
                 gate_extra["task_labels"] = flatten_task_labels(
                     buffer_by_task,
                     [tasks[i].name for i in range(len(buffer_by_task))])
+            if is_c0:
+                gate_extra["task_idx"] = t
+                # Source-task index per flattened buffer element, in the exact
+                # order `buffer` was built above, so a replayed state is scored
+                # through its own task's adapter (docs/track_c0.md §6.2).
+                gate_extra["buffer_task_ids"] = np.concatenate(
+                    [np.full(len(bb), i, dtype=int)
+                     for i, bb in enumerate(buffer_by_task)])
             if arbiter_dir is not None and method in ARBITER_CONFIGS:
                 # v0.34 §2.4: one log per stage, so the per-stage conflict
                 # fraction is a property of the stage, not of a flat run-long
@@ -265,6 +280,10 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
             torch.save(nav.state_dict(),
                       ckpt_dir / f"{method}_seed{seed}_K{k}_stage{t + 1}.pt")
 
+        # Oracle task identity (docs/track_c0.md §1/§2.4): every measurement of
+        # task j goes through adapter j, including old tasks at later stages.
+        if is_c0:
+            nav.active_task = t
         te_bank = task.banks[eval_split]
         _, _, sel = eval_policy_balanced(te_bank, ev, k, device, "learned",
                                          navigator=nav,
@@ -283,6 +302,8 @@ def run_sequence(tasks: list[TaskSpec], method: str, seed: int, k: int,
 
         # ---- 對所有 j ≤ t 量測 ----
         for j in range(t + 1):
+            if is_c0:
+                nav.active_task = j
             bank_j = tasks[j].banks[eval_split]
             bal, acc, sel_now = eval_policy_balanced(
                 bank_j, frozen_evals[j], k, device, "learned", navigator=nav,

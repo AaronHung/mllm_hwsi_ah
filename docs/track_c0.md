@@ -80,7 +80,7 @@ Linear(low_dim + high_dim + 1 -> 256) -> ReLU
 ```
 
 For `can_dataset`, `low_dim = 64` and `high_dim = 512`, so the core holds
-`577*256 + 256 + 256*64 + 64 + 64 + 1 = 164,225` parameters.
+`577*256 + 256 + 256*64 + 64 + 64 + 1 = 164,481` parameters.
 
 ### 2.2 Per-task FiLM adapters
 
