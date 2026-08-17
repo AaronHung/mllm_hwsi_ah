@@ -1,0 +1,22 @@
+{
+  "completed": [
+    "seed=0|method=eq_pres_norep|K=1",
+    "seed=0|method=eq_pres_norep|K=2",
+    "seed=1|method=eq_pres_norep|K=1",
+    "seed=1|method=eq_pres_norep|K=2",
+    "seed=2|method=eq_pres_norep|K=1",
+    "seed=2|method=eq_pres_norep|K=2"
+  ],
+  "metadata": {
+    "requested": "mps",
+    "torch_version": "2.12.0",
+    "cuda_available": false,
+    "mps_available": true,
+    "mps_fallback": "1",
+    "resolved_device": "mps",
+    "run_tag": "e2_norep_20260817T045648Z",
+    "git_commit": "d59bd90d742b163634864f13f2875919cdcf8041",
+    "hostname": "aaron-mac.local",
+    "command": "scripts/cl_main.py --device mps --methods eq_pres_norep --seeds 0 1 2 --budgets 1 2 --tag e2_norep_20260817T045648Z --resume"
+  }
+}

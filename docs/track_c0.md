@@ -233,6 +233,65 @@ way**.
 
 ## 10. Changelog
 
+- **v0.35-closeout E1 + E2 completed (2026-08-17, by Cursor — analysis only,
+  NOT a red-team-reviewed decision, NOT a protocol amendment). After these
+  two artifacts all compute for this ICASSP submission ends permanently.**
+  Both were pre-registered before running (`docs/alignment_test.md` for E1;
+  E2's composition and read-out rule in the signed-off closeout text), and
+  E2's bit-exactness regression passed 20/20 rows before any E2 unit ran.
+  - **E1 — utility-capability alignment: tier ALIGNMENT SUPPORTED**
+    (`results/utility_alignment_report.md`). The label-informed greedy oracle
+    reaches 0.9791 / 0.9926 cross-task balanced accuracy at K=1/2 against
+    `seqft` own-time 0.8896 / 0.9200 — `+0.0896` / `+0.0726`, roughly 3.5 and
+    2.9 mean quanta, better on 4/4 tasks at both K. Determinism check passed
+    (two identical passes over 36 cells); oracle `eps_optimal_mass` = 1.0000
+    and `normalized_regret` = 0.0000 as expected by construction; the
+    evaluator-equivalence check against the frozen `random_ref` column differs
+    by at most 0.0311, and is exactly 0.0000 on `esca` at every K — task 1
+    reproduces the frozen RNG state exactly, which is precisely what
+    `docs/alignment_test.md` §4 predicted.
+  - **Interpretive limit on E1, stated because the tier alone overstates
+    it.** The oracle selects with the ground-truth label, so part of its
+    margin may be steering the frozen evaluator toward the correct answer
+    rather than locating genuinely diagnostic evidence — `rcc` K=1 reaching
+    1.0000 from a single region is the clearest reminder. What the tier
+    licenses is "the one-step target is not intrinsically incapable of
+    delivering capability"; it does **not** license "a label-free learner can
+    realize it". No paper claim beyond the former.
+  - **E1's zero-compute half points the other way and is reported alongside.**
+    Across 100 config x K x comparator x seed observations,
+    `Spearman(delta eps_optimal_mass, delta AA) = +0.339`, and of the 77
+    observations where the utility axis improved only 43 (56%) also improved
+    `AA`. Read together with the oracle result: the target is aligned at its
+    argmax, but the movements our five interventions actually produced along
+    it convert into capability only weakly.
+  - **E2 — `L_eq` alone NOT sufficient (descriptive)**
+    (`results/track_c0_ablation_norep.md`). `eq_pres_norep` improves
+    `eps_optimal_mass` vs `distill` at both K (`+0.1191` / `+0.1365`) and is
+    non-worse on Forgetting at K=1 (`-0.0148`), but misses at K=2 by
+    **`+0.0008`** — a margin an order of magnitude below the smallest per-task
+    quantum (0.0105). Disclosed, not used to argue the read-out away: the rule
+    was frozen and applied as written, and this is a descriptive attribution
+    rather than a gate.
+  - **Attribution square, three corners of four.** Delta `eps_optimal_mass`
+    vs `distill`, 3-seed means:
+
+    | corner | replay imitation | adapter | K=1 | K=2 |
+    |---|---|---|---|---|
+    | `eq_pres` | yes | no | +0.0405 | +0.0352 |
+    | `eq_pres_norep` | no | no | +0.1191 | +0.1365 |
+    | `sp_nav_eq` | no | yes | +0.1429 | +0.1807 |
+
+    Removing the replay imitation term is worth `+0.0785` / `+0.1013`; adding
+    the adapter is worth `+0.0238` / `+0.0442`. **The `sp_nav_eq` utility
+    effect is mostly loss composition, not architecture** — two to three times
+    more of it comes from dropping the replay imitation term than from the
+    adapters. The fourth corner (`L_replay` + `L_eq` + adapter) was never run,
+    so no interaction is estimated and none is claimed.
+  - **This is an analysis artifact awaiting joint Aaron+Sol+Fable review.**
+    No config, seed, budget or router was added; no verdict was reopened. The
+    only remaining work on this paper is writing.
+
 - **C0 verdict computed (2026-08-17, by Cursor — analysis only, NOT a
   red-team-reviewed decision, NOT a protocol amendment):** the pre-registered
   12-unit grid (`runs/v2/track_c0_20260817T014543Z/`, 12/12 units, Mac MPS)
