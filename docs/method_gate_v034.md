@@ -431,3 +431,77 @@ per `docs/compute_policy.md` rule 4.
   winner-selection tie-break (§3.4). Nothing in `docs/method_gate_v033.md`
   is edited by this document except one dated provenance footnote at the end
   of its §10 and one changelog entry pointing here.
+
+- **Development-gate verdict computed (2026-08-17, by Cursor — analysis only,
+  NOT a red-team-reviewed decision, NOT a protocol amendment):** the
+  pre-registered 36-unit grid (`runs/v2/gate_v034_dev_20260816T154548Z/`,
+  5h03m wall-clock, Mac MPS) finished cleanly — exit 0, 36/36 units, 10 rows
+  each, no missing cells. The pre-launch bit-exactness regression passed
+  20/20 rows before launch (`results/method_gate_v034_bitexact_regression.md`)
+  and the §2.5 instrumentation batch was **ADMITTED** at 90/90 bit-identical
+  (`results/eq_pres_diag_bitexact_check.md`), so the conflict statistics are a
+  direct measurement of the config that failed Gate v2 rather than a proxy.
+  `scripts/method_gate_v034_verdict.py` applied the §3.2 criteria exactly as
+  frozen, with zero threshold or formula choices made after seeing results.
+  Full table: `results/method_gate_v034_dev_verdict.md`.
+  - **DEV GATE FAIL for all three configs.** `proj_distill` fails A/B-a/B-b/
+    B-c; `proj_eq_pres` passes A and B-c but fails B-a, B-b and C;
+    `conflict_eq_pres` passes A, B-b and C but fails B-a and B-c. No winner,
+    no confirmation run, no promotion.
+  - **Criterion A replicates the one Track-B effect that holds.**
+    `proj_eq_pres` improves `eps_optimal_mass` on 3/3 seeds at both K
+    (+0.0411/+0.0509 at K=1 vs `ours_uniform`/`distill`), `conflict_eq_pres`
+    likewise, and the generic control `proj_distill` — arbiter but no `L_eq` —
+    does **not** (K=2 vs `ours_uniform`, −0.0028). The §3.4 item-5 disclosure
+    is therefore **not triggered**: the effect tracks `L_eq`, not the arbiter.
+  - **Cell-level plasticity is not resolvable at this sample size.** With 3
+    seeds and per-task `n = 76-95`, the cell means are comparable to the
+    per-item quantum `1/n_test` and far smaller than the per-seed spread, so
+    no cell-level movement is reported as a repair or as a newly introduced
+    failure. The pre-registered statement is simply that **no configuration
+    met the targets**. This under-power is a disclosed limitation of the gate
+    itself, not a property of any config.
+  - **Mechanism: measured NULL.** Conflict fraction is 0.458-0.504 across
+    every config, stage and budget, with mean cosine about 0; the diagnosed
+    target cells are indistinguishable from healthy ones (`rcc` K=1, which
+    never had a problem, is the highest at 0.5039); and projection does not
+    change the conflict rate (`brca` K=2: `eq_pres_diag` 0.4913 vs
+    `proj_eq_pres` 0.4876). This is what unrelated high-dimensional gradients
+    look like. Per rider r2 no threshold was invented after the fact.
+  - **This is an analysis artifact awaiting joint Aaron+Sol+Fable review** —
+    Cursor started no confirmation run, altered no threshold, added no config,
+    and re-scored no v0.33 cell.
+
+- **v0.34 verdict RATIFIED (2026-08-17, Fable, external red-team, not
+  Cursor; PI Aaron concurring):** the DEV FAIL verdict and the bit-exactness
+  checks were re-verified cell by cell. **Method compute is formally closed
+  per §0/§4; no v0.35 for this ICASSP submission.** Three rulings modify how
+  the result is *described*, not what it is:
+  1. **Wording lock.** Cursor's first report narrated the diagnosed-cell
+     movements as repairs, and the `brca` K=4 movement as a newly opened
+     failure. Both framings are **withdrawn**: at 3 seeds the
+     means are smaller than or comparable to the per-item quantum and to seed
+     spread. Mandated phrasing: *cell-level plasticity differences fall within
+     seed variability; no configuration met the pre-registered targets*, with
+     the gate's under-power stated explicitly. Corrected in
+     `docs/research_timeline_20260817.md` under a dated erratum, and made
+     machine-checked in `scripts/check_forbidden_phrases.py`.
+  2. **Mechanism is a NULL RESULT, not an unconfirmed hypothesis.** Fable
+     added the internal-consistency argument Cursor had missed: projection
+     does not change the conflict rate, so the conflict is a structural
+     random phenomenon rather than a removable lesion. Gradient conflict is
+     the field's default explanation for this kind of interference; a
+     pre-registered instrumented measurement showing it does not hold for
+     continual evidence acquisition is a publishable negative result.
+  3. **The no-new-failure clause is the most valuable process fact of the
+     round.** Under the original S2-B (repair the two diagnosed cells plus
+     K=1 forgetting), `proj_eq_pres` would have PASSED and gone straight to a
+     confirmation run. Sol's amendment item 1 prevented that. This belongs in
+     the paper's protocol section.
+
+  Follow-up assigned to Cursor and carried out under this entry: the two
+  changelog entries above, the wording corrections, and three **zero-compute**
+  descriptive analyses derived from existing CSVs (utility-axis replication
+  across every `L_eq`-bearing config, a resolution/power note, and the
+  conflict-null table). None of them reopens any gate. **Track B is closed;
+  all remaining Track-B work is writing.**

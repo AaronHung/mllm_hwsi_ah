@@ -1,0 +1,18 @@
+{
+  "completed": [
+    "seed=0|method=eq_pres|K=1",
+    "seed=0|method=ours_uniform|K=1"
+  ],
+  "metadata": {
+    "requested": "mps",
+    "torch_version": "2.12.0",
+    "cuda_available": false,
+    "mps_available": true,
+    "mps_fallback": "1",
+    "resolved_device": "mps",
+    "run_tag": "c0_bitexact_20260817T013843Z",
+    "git_commit": "cf7c0135cc356f54d9ff0e0b179c2b10646aad6a",
+    "hostname": "aaron-mac.local",
+    "command": "scripts/cl_main.py --device mps --methods eq_pres ours_uniform --seeds 0 --budgets 1 --tag c0_bitexact_20260817T013843Z"
+  }
+}

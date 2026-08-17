@@ -121,10 +121,18 @@ space 裡「移除一階反向分量」；plasticity 一律維持 empirical gate
 
 ## 結果（2026-08-17 05:10 CST 補寫；跑批 36/36 乾淨完成，耗時 5h03m）
 
+> **Erratum（2026-08-17 06:20 CST 修訂）**：本節初版把 `proj_eq_pres` 的靶格結果寫成「確實把兩個
+> 被診斷的格子修好了」、把 `brca` K=4 寫成「新開了一個洞」。Fable 的 red-team review 裁定**不得
+> 這樣寫**：在 3 seeds、每個 task n=76–95 的條件下，這些格均值小於或相當於單一 test item 的翻面量
+> （`1/n_test` ≈ 0.0105–0.0108）與 seed 跨度，把它們敘事化成「修好／弄壞」就是把噪音當結果，正是
+> 最容易被打穿的過度解讀。下文已依裁定改寫；判準的 PASS/FAIL 判定本身沒有變（那是凍結規則的機械
+> 套用），改的是對那些數字的科學陳述。原始逐格數字一律以
+> `results/method_gate_v034_dev_verdict.md` 為準，該檔未被修改。
+
 **三個 config 全部 DEV FAIL。** 完整逐格數字見 `results/method_gate_v034_dev_verdict.md`。
 但這次的 FAIL 結構比 Gate v2 那次資訊量大很多，下面三點是給三方 review 的重點。
 
-### 1. `proj_eq_pres` **確實把兩個被診斷的格子修好了**，而且 utility 優勢保住
+### 1. `proj_eq_pres` 的靶格朝預期方向移動，但**幅度在量測噪音之內**；utility 優勢則是實的
 
 | 格子 | `eq_pres`（凍結，v2） | `proj_eq_pres`（v0.34） |
 |---|---|---|
@@ -134,13 +142,27 @@ space 裡「移除一階反向分量」；plasticity 一律維持 empirical gate
 | Δε-mass K=1 vs `ours_uniform`／`distill` | +0.0308／+0.0405 | **+0.0411／+0.0509（3/3 seeds）** |
 | Δε-mass K=2 | — | **+0.0293／+0.0335（3/3 seeds）** |
 
-也就是說 **criterion A PASS、criterion B-c（診斷靶）PASS**。介入本身在它瞄準的目標上是有效的。
+依凍結判準機械套用的結果是 **criterion A PASS、criterion B-c（診斷靶）PASS**。但這兩個 PASS 的
+份量完全不同，必須分開講：
+
+- **utility（A）是實的**：3/3 seeds 同號、效應量是量子的數倍，而且跨 `eq_pres`（5 seeds）／
+  `proj_eq_pres`／`conflict_eq_pres`（各 3 seeds）四個 config、兩個 gate、十一顆 seed 一致複現，
+  而沒有 `L_eq` 的 `proj_distill` **沒有**這個效應。效應跟著 `L_eq` 走，不跟著 arbiter 走。
+- **plasticity（B-c）的 PASS 不能當成「修好了」**：`brca` K=2 的 3-seed 平均 +0.0088 **小於**單一
+  test item 的翻面量 0.0108，per-seed 是 −0.0331 / +0.0068 / +0.0526，跨度 0.086 ≈ 8 個量子。
+  正確的陳述是：**在可得樣本量下，cell-level 的 plasticity 差異落在 seed variability 之內；
+  沒有任何 config 達成預註冊目標。**
+
+**這同時是我們自己判準的 limitation**：3 seeds、每個 task 76–95 筆測試資料，解析不出 ±0.01 的
+cell-level 門檻——v0.34 的 plasticity gate 在這個資料規模下 under-powered。這一點會誠實寫進論文的
+limitations，而不是藏起來。
 
 ### 2. 殺死它的是 Sol 加的那條 no-new-failure
 
-`proj_eq_pres` 在**沒被診斷過**的 `brca` K=4 新開了一個洞：ΔA[t,t] = **−0.0331**
-[+0.0000, −0.0729, −0.0263]——這格對 `eq_pres` 本來是好的（v2 pooled5 = +0.0012）。
-另外 B-b 在 K=2／K=4 對 `distill` 沒過（+0.0159／+0.0057），C 的 replay safety 在 K=2 沒過（+0.0082）。
+`proj_eq_pres` 在**沒被診斷過**的 `brca` K=4 觸發了 B-a 門檻：ΔA[t,t] = **−0.0331**
+[+0.0000, −0.0729, −0.0263]（同樣落在 seed variability 之內，per-seed 跨度 0.073 ≈ 7 個量子——
+**不可**寫成「弄壞了這一格」）。另外 B-b 在 K=2／K=4 對 `distill` 沒過（+0.0159／+0.0057），
+C 的 replay safety 在 K=2 沒過（+0.0082）。
 
 **這正是 Sol amendment item 1 存在的理由。** 如果照 Fable 原本的 S2-B（只要求修好已知的兩格 +
 K=1 遺忘），`proj_eq_pres` 會**通過** development gate 並直接進 confirmation——然後我們會拿一個
@@ -164,12 +186,16 @@ conflict fraction：
 失敗格都還高。這是兩個高維梯度之間「沒有系統性關係」時該有的樣子（符號各半、平均餘弦為零），
 不是「preservation gradient 在特定階段有系統地對抗 new-task acquisition」該有的樣子。
 
-依 rider r2，這條連結從一開始就登記為**事後陳述的假說、不設數值門檻、不中途停跑**，所以這裡只陳述
-事實：**儀器沒有支持「gradient conflict 造成 Gate-v2 那兩格 plasticity 損失」這個解釋。**
-要不要據此改寫論文裡的機制敘事，是三方 review 的裁定，不是這份文件的裁定。
+再加一條 Fable 補上的內部一致性證據：**投影並不改變衝突率**——同一格（`brca` K=2）
+`eq_pres_diag` 是 0.4913、`proj_eq_pres` 是 0.4876。衝突是結構性的隨機現象，不是可被消除的病灶。
 
-值得一併記下的是：投影**確實有在作用**（約半數 update 觸發，`|proj|/|g_m|` 約 0.03–0.15），而且
-確實把兩個靶格修好了。所以現在的狀況是「介入有效，但我們對它為什麼有效的解釋沒被證實」。
+依 rider r2，這條連結從一開始就登記為事後陳述、不設數值門檻、不中途停跑。經三方裁定，正確的定調
+比「沒證實」更強：這是**測到了 null**，而且是**可發表的 null**——gradient conflict／gradient
+surgery 是 CL 領域對這類干擾的**預設解釋**，我們用預註冊的儀器化量測顯示它在 continual evidence
+acquisition 上不成立。這是有用的負面結果，不是空手而回。
+
+而且這是**對被告本人的直接量測**（`eq_pres_diag` 90/90 bit-exact、ADMITTED）。若當初只有 arbiter-ON
+的代理統計，這段話今天寫不出來——PI 昨晚追加授權的那 9 個儀器化 unit 在這裡回本。
 
 ### 4. 附帶結論：utility 優勢來自 equivalence objective，不是來自 arbiter
 

@@ -52,6 +52,26 @@ FORBIDDEN = [
      "two-task validation setting; consistent with masking, not validated' "
      "— never 'masking confirmed' (wide-CI-crossing-zero result overclaims "
      "confirmation)"),
+    # v0.34 wording locks (Fable's ratification of the DEV FAIL verdict,
+    # 2026-08-17). At 3 seeds with per-task n=76-95, cell-level plasticity
+    # means are comparable to the per-item quantum and to seed spread, so
+    # narrating them as repairs or new failures is over-reading noise.
+    (r"\brepair(?:ed|s|ing)?\s+(?:the\s+)?(?:`?brca`?|`?lung`?|"
+     r"(?:diagnosed|target(?:ed)?)\s+cells?)",
+     "v0.34 wording lock: cell-level plasticity differences at 3 seeds fall "
+     "within seed variability and must not be described as a repair; correct "
+     "phrasing is 'cell-level plasticity differences fall within seed "
+     "variability; no configuration met the pre-registered targets'"),
+    (r"introduc(?:ed|es|ing)\s+a\s+new\s+(?:plasticity\s+)?"
+     r"(?:failure|regression|hole)",
+     "v0.34 wording lock: same reason in the other direction — a cell that "
+     "crosses a threshold at 3 seeds has not been shown to be a newly "
+     "introduced failure"),
+    (r"gradient[\s-]conflict\s+(?:explanation\s+)?(?:is\s+)?unconfirmed",
+     "v0.34 mechanism lock: the conflict measurement is a NULL RESULT "
+     "(conflict fraction 0.458-0.504, mean cos ~0, target cells "
+     "indistinguishable from healthy ones, projection does not change the "
+     "conflict rate), not an 'unconfirmed' hypothesis"),
 ]
 
 # A match preceded by one of these cues (within NEGATION_WINDOW chars on the
