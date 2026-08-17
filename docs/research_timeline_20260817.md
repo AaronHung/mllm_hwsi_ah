@@ -31,7 +31,9 @@ Fable 接手把 `paper/main.tex` 改成 framework-first 脊椎（Fig.1 領頭 �
 | Bit-exact 回歸 | — | **PASS，20/20 逐位相同** |
 | Development gate | — | **36/36 跑完（5h03m），三個 config 全部 DEV FAIL** |
 | 機制假說 | 未量測 | **儀器直接量測，不支持 gradient-conflict 解釋** |
-| 下一個阻塞點 | 三方對 Gate v2 的 joint unblinding review（已完成） | **三方對 v0.34 dev verdict 的 focused review** |
+| Track B | 進行中 | **已 ratify、已封存**（changelog、措辭鎖修正、三項零算力分析均已完成） |
+| Track C0 | 不存在 | **12/12 跑完，兩個 config 皆 C0 FAIL** |
+| 下一個阻塞點 | 三方對 Gate v2 的 joint unblinding review（已完成） | **三方對 Track C0 verdict 的 review** |
 
 ## 為什麼會有 v0.34（決策鏈，別跳過）
 
@@ -203,6 +205,41 @@ generic control `proj_distill`（= `ours_uniform` + 同一個 arbiter）**criter
 （K=2 Δε-mass vs `ours_uniform` = −0.0028）。§3.4 item 5 的揭露條款因此**未觸發**——
 如果它過了，那會是對 novelty 定位的直接反證。目前的資料指向相反方向：把 arbiter 加在 generic
 distillation 上拿不到 utility 優勢，那個優勢是 `L_eq` 帶來的。
+
+## Track C0 — architecture-level 篩選（2026-08-17 10:40 CST 補寫）
+
+三方裁定 Track B 封存後，Sol 提案、PI 核准、Fable 釘規格，開了 **Track C0**：問的不再是「該保存
+什麼」，而是「**stability 跟 plasticity 是不是根本不該共用同一組參數**」。做法是每個 task 一組
+per-task FiLM adapter（640 參數 = 共享核心的 0.39%，初始化即恆等）加上一個慢速更新的共享核心
+（`lr_core = 0.1 × lr_adapter`）。**假設 oracle task identity**（train 與 test 都知道是哪個
+task）——這是 best-case 假設，router 是 future work，任何 C0 結論都不得脫離這個前提。
+
+預註冊先 commit（訓練前）→ 實作 → bit-exact 回歸 20/20 逐位相同 → 12 units 開跑（44 分鐘跑完）。
+
+**結果：兩個 config 都 C0 FAIL。** 逐格數字見 `results/track_c0_verdict.md`；讀完 verdict 後寫的
+三項結構性觀察在 `results/track_c0_observations.md`（描述性，不改任何 verdict）。
+
+| config | c1 plasticity | c2 stability | c3 utility | c4 disclosure | C0 |
+|---|---|---|---|---|---|
+| `sp_nav`（只有架構） | FAIL | FAIL | n/a | PASS | **FAIL** |
+| `sp_nav_eq`（架構 + `L_eq`） | FAIL | PASS | **PASS** | PASS | **FAIL** |
+
+三件值得記的事：
+
+1. **C0 的核心假說沒有成立**。參數隔離沒有把新任務的學習能力拉到無約束基線（`seqft`）的水準；
+   最後也最難的 `brca` 兩個 config 都是負的。
+2. **架構本身既不買 retention 也不買 utility**。`sp_nav`（只有 adapter、沒有任何 CL loss）
+   c2 輸得很難看（+0.0728 / +0.0460 vs `distill`），utility 也是負的。加上 `L_eq` 之後
+   c2 轉 PASS、c3 以本專案至今最大的幅度 PASS（+0.1429 / +0.1807 vs `distill`，3/3 seeds）。
+3. **同一個不可互換性又複現了一次**，而且這次是在**給了每個 task 自己的參數、並且給了
+   oracle task identity** 這種最有利的條件下仍然成立——這是同一個負面結果的**更強版本**，
+   不是又一個新的失敗。
+
+**必須一併揭露的兩個限制**（寫在 observations 裡，不拿來為 FAIL 辯護）：`esca` 是第一個 task，
+stage 1 沒有 buffer 也沒有 old_nav，兩個 config 在那裡**是同一個演算法**（已驗證 6 列完全相同），
+所以那一格量的是慢速核心的 learning-rate 代價，根本測不到 C0 要問的問題；而 c1 的 −0.01 門檻
+在**每一個 task 都小於一個測試樣本**的翻面量（`esca` 的量子是 0.0667，門檻只有它的 0.15 倍），
+所以 c1 兩個方向都 under-powered——就算它 PASS 也是弱證據。
 
 ## 接下來的 scope
 

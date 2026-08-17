@@ -233,6 +233,34 @@ way**.
 
 ## 10. Changelog
 
+- **C0 verdict computed (2026-08-17, by Cursor — analysis only, NOT a
+  red-team-reviewed decision, NOT a protocol amendment):** the pre-registered
+  12-unit grid (`runs/v2/track_c0_20260817T014543Z/`, 12/12 units, Mac MPS)
+  finished cleanly, after the §5 bit-exactness regression passed 20/20 rows
+  (`results/track_c0_bitexact_regression.md`).
+  `scripts/track_c0_verdict.py` applied the §7 criteria exactly as frozen.
+  Full table: `results/track_c0_verdict.md`.
+  - **C0 FAIL for both configs.** `sp_nav` fails c1 and c2; `sp_nav_eq` fails
+    c1 while passing c2, c3 and c4. Branch per §9: return to Track A. No
+    C0.1, no router, no confirmation runs.
+  - **c1 (the C0 hypothesis) is not met.** Parameter isolation did not
+    deliver unconstrained-baseline plasticity; `brca`, the last and hardest
+    task, is negative for both configs.
+  - **c2/c3 reproduce the Track-B shape.** `sp_nav_eq` is stability-safe
+    (`-0.0106`/`-0.0053` vs `distill`) and shows the largest utility effect
+    measured in this project (`+0.1429`/`+0.1807` vs `distill`, 3/3 seeds),
+    while `sp_nav` — architecture with no consolidation term — fails
+    stability and is negative on utility. Architecture alone buys neither.
+  - Three structural caveats are recorded separately in
+    `results/track_c0_observations.md`, written after the verdict and
+    changing nothing in it: `esca` is stage 1 and therefore cannot test the
+    hypothesis at all (both configs are the same algorithm there, verified);
+    c1's `-0.01` threshold is finer than one test item on every task, so the
+    criterion is under-powered in both directions; and part of c3's margin is
+    plausibly attributable to the §6.1 composition decision rather than to
+    the architecture.
+  - **This is an analysis artifact awaiting joint Aaron+Sol+Fable review.**
+
 - **C0 opened (2026-08-17, Sol proposal + PI approval + Fable specification
   and sign-off; document written by Cursor, criteria transcribed from the
   signed-off prompt, no C0 numbers observed):** pre-registration of the
