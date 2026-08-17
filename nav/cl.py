@@ -694,6 +694,19 @@ METHOD_GATE_KWARGS = {
     "samp_drift_only": dict(use_replay=True, use_distill=True,
                             utility_weight=False, replay_sampling="importance",
                             sampling_alpha=0.0),
+    # v0.35-closeout E2 (docs/track_c0.md changelog).  NOT a v0.33 gate
+    # config and not a candidate for anything — it completes the C0
+    # attribution square so the sp_nav_eq stability/utility effects can be
+    # split between loss composition and adapter architecture:
+    #     eq_pres        = L_replay + L_eq, no adapter   (frozen)
+    #     eq_pres_norep  = L_eq only,       no adapter   (this entry)
+    #     sp_nav_eq      = L_eq only,       adapter      (frozen)
+    # It lives in this dict purely because scripts/cl_main.py's method
+    # resolution chain is frozen under the closeout authorization, so a new
+    # registry could not be wired in.  Plain pre-C0 navigator: no adapters, no
+    # slow-core split, no replay imitation term, no old-policy KL.
+    "eq_pres_norep": dict(use_replay=False, use_distill=True,
+                          utility_weight=False, use_eq_pres=True),
     # v0.34 method track (docs/method_gate_v034.md §2.3).  Same ours_uniform
     # base as above, so the only isolated variables are the memory objective
     # and the arbiter.  NOTE: `proj_distill` keeps the name used in the
